@@ -18,7 +18,8 @@ router.get('/ad', (req, res) => {
     const adPath = path.join(__dirname, '../../public/ads.mp4');
 
     if (!fs.existsSync(adPath)) {
-        return res.status(404).json({ error: 'Ad file not found' });
+        // Fallback to a placeholder MP4 since 173MB ads.mp4 is too large for GitHub/Render
+        return res.redirect('https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4');
     }
 
     const stat = fs.statSync(adPath);
