@@ -4,10 +4,17 @@ const User           = require('../db/models/userModel');
 const Notification   = require('../db/models/notificationModel');
 const redisClient      = require('../db/redisClient');
 
-// We share the connection parameters from Redis env
+// Parse REDIS_URL for BullMQ connection options
+const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const parsedUrl = new URL(redisUrl);
+const isTLS = redisUrl.startsWith('rediss://');
+
 const connection = {
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: parseInt(process.env.REDIS_PORT) || 6379,
+  host: parsedUrl.hostname,
+  port: parseInt(parsedUrl.port) || 6379,
+  username: parsedUrl.username || undefined,
+  password: parsedUrl.password || undefined,
+  tls: isTLS ? { rejectUnauthorized: false } : undefined
 };
 
 const SCRAPER_QUEUE = 'scraper-tasks';
