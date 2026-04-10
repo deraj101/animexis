@@ -313,18 +313,39 @@ router.post('/bypass-login', async (req, res) => {
 });
 
 // ─── Auth guard (reused from statsRoutes pattern) ────────────────────────────
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ success: false, message: 'Authentication required.' });
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET || 'changeme_use_env');
     req.userEmail = payload.email.toLowerCase();
+    
+    // Refresh last_seen here too if needed, but since we usually use the 
+    // global middleware for main routes, this is a fallback.
+    // To stay consistent, let's at least update last_seen if we have a User model here.
+    const User = require('../db/models/userModel');
+    const user = await User.findOne({ email: req.userEmail });
+    if (user) {
+      const now = new Date();
+      if (!user.last_seen || user.last_seen < new Date(now.getTime() - 2 * 60 * 1000)) {
+        user.last_seen = now;
+        await user.save();
+      }
+      req.user = user;
+    }
+
     next();
   } catch {
     return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
   }
 }
+
+// ─── GET /api/auth/heartbeat ─────────────────────────────────────────────────
+// Simple endpoint for frontend to stay "active"
+router.get('/heartbeat', requireAuth, (req, res) => {
+  res.json({ success: true, timestamp: new Date().toISOString() });
+});
 
 // ─── POST /api/auth/update-profile ───────────────────────────────────────────
 router.post('/update-profile', requireAuth, async (req, res) => {

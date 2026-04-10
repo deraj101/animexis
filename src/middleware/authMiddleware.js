@@ -21,6 +21,15 @@ async function requireAuth(req, res, next) {
        return res.status(401).json({ success: false, error: 'User no longer exists' });
     }
 
+    // 🔥 Update last_seen if it's been more than 2 minutes since last update
+    const now = new Date();
+    const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);
+    
+    if (!user.last_seen || user.last_seen < twoMinutesAgo) {
+      user.last_seen = now;
+      await user.save();
+    }
+
     req.user = user; // Attach the full user object for convenience
     req.isAdmin = !!user.isAdmin;
     

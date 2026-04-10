@@ -252,12 +252,19 @@ async function getImageBySlug(slug) {
 }
 
 function relativeTime(dateValue) {
-  const diff = Date.now() - new Date(dateValue).getTime();
-  const s    = Math.floor(diff / 1000);
-  if (s < 60)     return 'just now';
+  if (!dateValue) return 'never';
+  const now = Date.now();
+  const then = new Date(dateValue).getTime();
+  const diff = now - then;
+  
+  // If time is in the future or very close, say just now
+  if (diff < 30000) return 'just now';
+
+  const s = Math.floor(diff / 1000);
   if (s < 3600)   return `${Math.floor(s / 60)}m`;
   if (s < 86400)  return `${Math.floor(s / 3600)}h`;
   if (s < 604800) return `${Math.floor(s / 86400)}d`;
+  
   return new Date(dateValue).toLocaleDateString();
 }
 
