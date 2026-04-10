@@ -12,6 +12,7 @@ const webhookRoutes = require('./routes/webhookRoutes');
 
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Compress all responses (60-80% smaller JSON payloads)
 app.use(compression());
