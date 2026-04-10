@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Environment secrets — NEVER commit these
+.env
+
+# Logs
+*.log
+logs/
+
+# OS / Editor
+.DS_Store
+desktop.ini
+.vscode/
+*.swp
+
+# Build output
+dist/
+coverage/
+
+# Local SQLite leftovers (deleted but just in case)
+*.db
+*.db-shm
+*.db-wal
+
+# Test artifacts
+test_spotlight.js
+cur_res.jsonpublic/ads.mp4

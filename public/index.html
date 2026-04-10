@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animexis API · Documentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #080b10;
+      --surface:  #0d1117;
+      --panel:    #111820;
+      --border:   rgba(255,255,255,0.06);
+      --accent:   #00e5ff;
+      --accent2:  #7c3aed;
+      --green:    #22d3a0;
+      --yellow:   #fbbf24;
+      --red:      #f87171;
+      --orange:   #fb923c;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --dim:      #334155;
+      --glow:     0 0 30px rgba(0,229,255,0.12);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── NOISE TEXTURE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    /* ── LAYOUT ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── SIDEBAR ── */
+    aside {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--dim) transparent;
+    }
+
+    .sidebar-logo {
+      padding: 1.8rem 1.5rem 1.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo-mark {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      box-shadow: 0 0 20px rgba(0,229,255,0.2);
+    }
+
+    .logo-text {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: white;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .version-badge {
+      display: inline-block;
+      background: rgba(0,229,255,0.08);
+      color: var(--accent);
+      border: 1px solid rgba(0,229,255,0.2);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-top: 6px;
+    }
+
+    .status-bar {
+      margin: 0 1.5rem 0;
+      padding: 0.7rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .sidebar-section {
+      padding: 1.2rem 1.5rem 0.4rem;
+    }
+
+    .sidebar-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0.5rem 0.7rem;
+      border-radius: 8px;
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: all 0.18s;
+      margin-bottom: 2px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+
+    .nav-item:hover {
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+    }
+
+    .nav-item.active {
+      background: rgba(0,229,255,0.08);
+      color: var(--accent);
+      border: 1px solid rgba(0,229,255,0.15);
+    }
+
+    .method-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-get  { background: var(--green); }
+    .dot-post { background: var(--yellow); }
+    .dot-del  { background: var(--red); }
+    .dot-patch{ background: var(--orange); }
+
+    /* ── MAIN CONTENT ── */
+    main {
+      padding: 0;
+      overflow-x: hidden;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 4rem 3rem 3rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(124,58,237,0.05) 0%, transparent 60%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: 'API';
+      position: absolute;
+      right: -20px;
+      top: -20px;
+      font-family: 'Syne', sans-serif;
+      font-size: 12rem;
+      font-weight: 800;
+      color: rgba(255,255,255,0.015);
+      pointer-events: none;
+      line-height: 1;
+    }
+
+    .hero-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hero-label::before {
+      content: '';
+      display: inline-block;
+      width: 20px;
+      height: 1px;
+      background: var(--accent);
+    }
+
+    .hero h1 {
+      font-size: 2.8rem;
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -1px;
+      color: white;
+      margin-bottom: 1rem;
+    }
+
+    .hero h1 span {
+      color: var(--accent);
+    }
+
+    .hero-desc {
+      max-width: 560px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 0.95rem;
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 2rem;
+      margin-top: 2.5rem;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: white;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-divider {
+      width: 1px;
+      background: var(--border);
+      align-self: stretch;
+    }
+
+    /* ── BASE URL BOX ── */
+    .base-url-strip {
+      padding: 1rem 3rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .base-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      flex-shrink: 0;
+    }
+
+    .base-url-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+      background: rgba(0,229,255,0.06);
+      border: 1px solid rgba(0,229,255,0.15);
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+    }
+
+    /* ── CONTENT SECTIONS ── */
+    .content-section {
+      padding: 3rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .content-section:last-child {
+      border-bottom: none;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .section-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .section-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: white;
+    }
+
+    /* ── ENDPOINT CARDS ── */
+    .endpoint {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .endpoint:hover {
+      border-color: rgba(255,255,255,0.1);
+    }
+
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.4rem;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      color: inherit;
+      width: 100%;
+      text-align: left;
+    }
+
+    .method-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      letter-spacing: 0.08em;
+      flex-shrink: 0;
+      min-width: 52px;
+      text-align: center;
+    }
+
+    .badge-get    { background: rgba(34,211,160,0.12); color: var(--green);  border: 1px solid rgba(34,211,160,0.25); }
+    .badge-post   { background: rgba(251,191,36,0.12); color: var(--yellow); border: 1px solid rgba(251,191,36,0.25); }
+    .badge-delete { background: rgba(248,113,113,0.12); color: var(--red);   border: 1px solid rgba(248,113,113,0.25); }
+    .badge-patch  { background: rgba(251,146,60,0.12); color: var(--orange); border: 1px solid rgba(251,146,60,0.25); }
+
+    .endpoint-path {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--text);
+      flex: 1;
+    }
+
+    .endpoint-path .param {
+      color: var(--accent);
+    }
+
+    .endpoint-desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .auth-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem;
+      background: rgba(124,58,237,0.12);
+      color: #a78bfa;
+      border: 1px solid rgba(124,58,237,0.2);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .admin-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem;
+      background: rgba(251,191,36,0.1);
+      color: var(--yellow);
+      border: 1px solid rgba(251,191,36,0.2);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .endpoint-body {
+      display: none;
+      padding: 0 1.4rem 1.4rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .endpoint-body.open {
+      display: block;
+    }
+
+    .params-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.8rem;
+    }
+
+    .params-table th {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 0.5rem 0.8rem;
+      text-align: left;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .params-table td {
+      padding: 0.6rem 0.8rem;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      color: var(--text);
+      vertical-align: top;
+    }
+
+    .params-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .param-name {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+      font-size: 0.8rem;
+    }
+
+    .param-type {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--orange);
+      font-size: 0.75rem;
+    }
+
+    .required-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      background: rgba(248,113,113,0.1);
+      color: var(--red);
+      padding: 1px 5px;
+      border-radius: 3px;
+      border: 1px solid rgba(248,113,113,0.2);
+    }
+
+    .optional-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.6rem;
+      background: rgba(100,116,139,0.1);
+      color: var(--muted);
+      padding: 1px 5px;
+      border-radius: 3px;
+      border: 1px solid rgba(100,116,139,0.15);
+    }
+
+    /* ── CODE BLOCK ── */
+    .code-block {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 0.8rem 0;
+      position: relative;
+    }
+
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 1rem;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .code-lang {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .copy-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border);
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+
+    .copy-btn:hover {
+      color: var(--accent);
+      border-color: rgba(0,229,255,0.3);
+    }
+
+    .copy-btn.copied {
+      color: var(--green);
+      border-color: rgba(34,211,160,0.3);
+    }
+
+    pre {
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1.7;
+      color: var(--text);
+      margin: 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--dim) transparent;
+    }
+
+    .kw   { color: #a78bfa; }
+    .str  { color: var(--green); }
+    .num  { color: var(--orange); }
+    .cmt  { color: var(--muted); font-style: italic; }
+    .key  { color: var(--accent); }
+    .bool { color: var(--red); }
+    .fn   { color: var(--yellow); }
+    .url-token { color: #93c5fd; }
+
+    /* ── INFO CALLOUTS ── */
+    .callout {
+      display: flex;
+      gap: 12px;
+      padding: 1rem 1.2rem;
+      border-radius: 10px;
+      margin: 1rem 0;
+      font-size: 0.83rem;
+      line-height: 1.6;
+    }
+
+    .callout-info {
+      background: rgba(0,229,255,0.05);
+      border: 1px solid rgba(0,229,255,0.15);
+      color: #a5f3fc;
+    }
+
+    .callout-warn {
+      background: rgba(251,191,36,0.05);
+      border: 1px solid rgba(251,191,36,0.15);
+      color: #fde68a;
+    }
+
+    .callout-icon {
+      font-size: 0.9rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ── AUTH SECTION ── */
+    .auth-flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .auth-step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem;
+      position: relative;
+    }
+
+    .step-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--accent);
+      margin-bottom: 0.6rem;
+      letter-spacing: 0.1em;
+    }
+
+    .step-title {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: white;
+      margin-bottom: 0.4rem;
+    }
+
+    .step-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── RESPONSE SCHEMA ── */
+    .schema-block {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.2rem;
+      margin: 0.8rem 0;
+    }
+
+    .schema-row {
+      display: flex;
+      gap: 1rem;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      align-items: flex-start;
+      font-size: 0.8rem;
+    }
+
+    .schema-row:last-child { border-bottom: none; }
+
+    .schema-key { font-family: 'JetBrains Mono', monospace; color: var(--accent); min-width: 130px; flex-shrink: 0; }
+    .schema-type { font-family: 'JetBrains Mono', monospace; color: var(--orange); min-width: 80px; flex-shrink: 0; }
+    .schema-desc { color: var(--muted); line-height: 1.5; }
+
+    /* ── HEALTH BADGE ── */
+    #health-status {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+    }
+
+    /* ── MOBILE ── */
+    .menu-toggle {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: relative;
+        height: auto;
+        overflow-y: visible;
+      }
+
+      .hero {
+        padding: 2rem 1.5rem;
+      }
+
+      .content-section {
+        padding: 2rem 1.5rem;
+      }
+
+      .base-url-strip {
+        padding: 1rem 1.5rem;
+      }
+
+      .hero h1 {
+        font-size: 2rem;
+      }
+
+      .endpoint-desc {
+        display: none;
+      }
+    }
+
+    /* ── LIVE HEALTH ── */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .health-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .health-label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .health-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      font-weight: 600;
+      color: white;
+    }
+
+    .health-value.ok { color: var(--green); }
+    .health-value.err { color: var(--red); }
+    .health-value.warn { color: var(--yellow); }
+
+    /* ── RATE LIMIT TABLE ── */
+    .limits-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .limit-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem;
+    }
+
+    .limit-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 0.3rem;
+    }
+
+    .limit-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.1rem;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+    }
+
+    .limit-desc {
+      font-size: 0.73rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside>
+    <div class="sidebar-logo">
+      <a class="logo-mark" href="#">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <div class="logo-text">Animexis <span>API</span></div>
+        </div>
+      </a>
+      <div class="version-badge">v1.0.0</div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-dot"></div>
+      <span id="sidebar-status">Checking status...</span>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Getting Started</div>
+      <a class="nav-item active" onclick="scrollTo('overview')">
+        <span>📋</span> Overview
+      </a>
+      <a class="nav-item" onclick="scrollTo('auth')">
+        <span>🔐</span> Authentication
+      </a>
+      <a class="nav-item" onclick="scrollTo('rate-limits')">
+        <span>⏱</span> Rate Limits
+      </a>
+      <a class="nav-item" onclick="scrollTo('health')">
+        <span>🩺</span> Health Check
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Anime</div>
+      <a class="nav-item" onclick="scrollTo('anime-recent')">
+        <span class="method-dot dot-get"></span> Recent Episodes
+      </a>
+      <a class="nav-item" onclick="scrollTo('anime-spotlight')">
+        <span class="method-dot dot-get"></span> Spotlight
+      </a>
+      <a class="nav-item" onclick="scrollTo('anime-search')">
+        <span class="method-dot dot-get"></span> Search
+      </a>
+      <a class="nav-item" onclick="scrollTo('anime-details')">
+        <span class="method-dot dot-get"></span> Details
+      </a>
+      <a class="nav-item" onclick="scrollTo('anime-episode')">
+        <span class="method-dot dot-get"></span> Episode Links
+      </a>
+      <a class="nav-item" onclick="scrollTo('anime-popular')">
+        <span class="method-dot dot-get"></span> Popular
+      </a>
+      <a class="nav-item" onclick="scrollTo('anime-genres')">
+        <span class="method-dot dot-get"></span> Genres
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Auth</div>
+      <a class="nav-item" onclick="scrollTo('auth-register')">
+        <span class="method-dot dot-post"></span> Register / Login
+      </a>
+      <a class="nav-item" onclick="scrollTo('auth-verify')">
+        <span class="method-dot dot-post"></span> Verify OTP
+      </a>
+      <a class="nav-item" onclick="scrollTo('auth-profile')">
+        <span class="method-dot dot-patch"></span> Update Profile
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Stats & Users</div>
+      <a class="nav-item" onclick="scrollTo('stats-all')">
+        <span class="method-dot dot-get"></span> Get Stats
+      </a>
+      <a class="nav-item" onclick="scrollTo('stats-favorite')">
+        <span class="method-dot dot-post"></span> Toggle Favorite
+      </a>
+      <a class="nav-item" onclick="scrollTo('stats-watchtime')">
+        <span class="method-dot dot-post"></span> Log Watch Time
+      </a>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Social</div>
+      <a class="nav-item" onclick="scrollTo('comments')">
+        <span class="method-dot dot-get"></span> Comments
+      </a>
+      <a class="nav-item" onclick="scrollTo('notifications')">
+        <span class="method-dot dot-get"></span> Notifications
+      </a>
+    </div>
+
+    <div class="sidebar-section" style="padding-bottom: 2rem;">
+      <div class="sidebar-label">Admin</div>
+      <a class="nav-item" onclick="scrollTo('admin')">
+        <span>🛡️</span> Admin Routes
+      </a>
+      <a class="nav-item" onclick="scrollTo('payments')">
+        <span>💳</span> Payments
+      </a>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═══ -->
+  <main>
+
+    <!-- ── HERO ── -->
+    <div class="hero" id="overview">
+      <div class="hero-label">REST API Reference</div>
+      <h1>Animexis <span>API</span></h1>
+      <p class="hero-desc">
+        Anime streaming backend powered by Node.js, Express, MongoDB, and Redis.
+        Scrapes Anitaku and enriches metadata via AniList GraphQL. JWT-secured,
+        with subscriptions, comments, notifications, and background workers.
+      </p>
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="stat-val">40+</div>
+          <div class="stat-label">Endpoints</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <div class="stat-val">JWT</div>
+          <div class="stat-label">Auth Method</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <div class="stat-val">500</div>
+          <div class="stat-label">Req / 15 min</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <div class="stat-val">JSON</div>
+          <div class="stat-label">Format</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BASE URL ── -->
+    <div class="base-url-strip">
+      <span class="base-label">Base URL</span>
+      <span class="base-url-code">https://your-domain.com/api</span>
+      <span class="base-label" style="margin-left:1.5rem;">Content-Type</span>
+      <span class="base-url-code">application/json</span>
+    </div>
+
+    <!-- ── AUTHENTICATION ── -->
+    <div class="content-section" id="auth">
+      <div class="section-header">
+        <span class="section-num">01</span>
+        <span class="section-title">Authentication</span>
+      </div>
+
+      <p style="color:var(--muted); font-size:0.85rem; line-height:1.7; margin-bottom:1.5rem;">
+        Most write operations and user-specific data require a JWT token. Obtain one by registering or verifying OTP, then include it as a Bearer token.
+      </p>
+
+      <div class="auth-flow">
+        <div class="auth-step">
+          <div class="step-num">STEP 01</div>
+          <div class="step-title">Send Email</div>
+          <div class="step-desc">POST to <code style="color:var(--accent)">/auth/send-otp</code> with your email. A 6-digit code is sent.</div>
+        </div>
+        <div class="auth-step">
+          <div class="step-num">STEP 02</div>
+          <div class="step-title">Verify OTP</div>
+          <div class="step-desc">POST to <code style="color:var(--accent)">/auth/verify-otp</code> with email + code to receive a JWT.</div>
+        </div>
+        <div class="auth-step">
+          <div class="step-num">STEP 03</div>
+          <div class="step-title">Use Token</div>
+          <div class="step-desc">Attach header: <code style="color:var(--accent)">Authorization: Bearer &lt;token&gt;</code></div>
+        </div>
+        <div class="auth-step">
+          <div class="step-num">STEP 04</div>
+          <div class="step-title">Admin Access</div>
+          <div class="step-desc">Admin JWT required for <code style="color:var(--yellow)">/admin/*</code> routes. Email must be in <code style="color:var(--accent)">ADMIN_EMAILS</code> env.</div>
+        </div>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ️</span>
+        <span>Tokens carry the user's <strong>email</strong> as payload. All authenticated endpoints attach the full user object to <code style="color:var(--accent)">req.user</code>.</span>
+      </div>
+    </div>
+
+    <!-- ── RATE LIMITS ── -->
+    <div class="content-section" id="rate-limits">
+      <div class="section-header">
+        <span class="section-num">02</span>
+        <span class="section-title">Rate Limits &amp; Usage Limits</span>
+      </div>
+      <div class="limits-grid">
+        <div class="limit-card">
+          <div class="limit-title">Global API Limit</div>
+          <div class="limit-val">500 req</div>
+          <div class="limit-desc">Per IP, per 15-minute window. Applies to all <code style="color:var(--accent)">/api/*</code> routes.</div>
+        </div>
+        <div class="limit-card">
+          <div class="limit-title">Free Users — Episodes</div>
+          <div class="limit-val">20 / day</div>
+          <div class="limit-desc">Unique episodes via <code style="color:var(--accent)">/episode-info</code>, <code style="color:var(--accent)">/stream</code>, <code style="color:var(--accent)">/video-info</code>. Tracked in Redis Sets per email per day.</div>
+        </div>
+        <div class="limit-card">
+          <div class="limit-title">Premium Users</div>
+          <div class="limit-val">Unlimited</div>
+          <div class="limit-desc">No episode limit. Requires <code style="color:var(--accent)">subscription: "premium"</code> in user record.</div>
+        </div>
+        <div class="limit-card">
+          <div class="limit-title">Rate-Limit Exempt</div>
+          <div class="limit-val">/health, /ad</div>
+          <div class="limit-desc">Health checks and the ad video endpoint are always excluded from rate limiting.</div>
+        </div>
+      </div>
+      <div class="callout callout-warn" style="margin-top:1rem;">
+        <span class="callout-icon">⚠️</span>
+        <span>Exceeding the daily episode limit returns <strong>HTTP 403</strong> with <code style="color:var(--yellow)">limitReached: true</code>. Premium upgrade via <code style="color:var(--yellow)">/api/payments/create-checkout-session</code>.</span>
+      </div>
+    </div>
+
+    <!-- ── HEALTH CHECK ── -->
+    <div class="content-section" id="health">
+      <div class="section-header">
+        <span class="section-num">03</span>
+        <span class="section-title">Health Check</span>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/health</span>
+          <span class="endpoint-desc">Service status</span>
+        </div>
+      </div>
+
+      <div class="health-grid" id="healthGrid">
+        <div class="health-card">
+          <div class="health-label">Status</div>
+          <div class="health-value" id="h-status">—</div>
+        </div>
+        <div class="health-card">
+          <div class="health-label">MongoDB</div>
+          <div class="health-value" id="h-mongo">—</div>
+        </div>
+        <div class="health-card">
+          <div class="health-label">Redis</div>
+          <div class="health-value" id="h-redis">—</div>
+        </div>
+        <div class="health-card">
+          <div class="health-label">Uptime</div>
+          <div class="health-value" id="h-uptime">—</div>
+        </div>
+      </div>
+
+      <div class="code-block" style="margin-top:1.5rem;">
+        <div class="code-header">
+          <span class="code-lang">JSON Response</span>
+        </div>
+        <pre>{
+  <span class="key">"status"</span>: <span class="str">"ok"</span>,
+  <span class="key">"mongo"</span>: <span class="str">"connected"</span>,
+  <span class="key">"redis"</span>: <span class="str">"connected"</span>,
+  <span class="key">"uptime"</span>: <span class="str">"3820s"</span>,
+  <span class="key">"env"</span>: <span class="str">"production"</span>
+}</pre>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════ ANIME ENDPOINTS ═══════════════════════ -->
+
+    <div class="content-section" id="anime-recent">
+      <div class="section-header">
+        <span class="section-num">04</span>
+        <span class="section-title">Anime — Recent Episodes</span>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/recent</span>
+          <span class="endpoint-desc">Latest released episodes</span>
+        </div>
+      </div>
+
+      <table class="params-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">page</span></td>
+            <td><span class="param-type">integer</span></td>
+            <td><span class="optional-badge">optional</span></td>
+            <td style="color:var(--muted)">Page number, default 1</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">Example Response</span>
+        </div>
+        <pre>{
+  <span class="key">"success"</span>: <span class="bool">true</span>,
+  <span class="key">"episodes"</span>: [
+    {
+      <span class="key">"title"</span>: <span class="str">"One Piece"</span>,
+      <span class="key">"slug"</span>: <span class="str">"one-piece"</span>,
+      <span class="key">"episode"</span>: <span class="str">"Episode 1122"</span>,
+      <span class="key">"image"</span>: <span class="str">"https://..."</span>
+    }
+  ]
+}</pre>
+      </div>
+    </div>
+
+    <div class="content-section" id="anime-spotlight">
+      <div class="section-header">
+        <span class="section-num">05</span>
+        <span class="section-title">Anime — Spotlight</span>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/spotlight</span>
+          <span class="endpoint-desc">Featured/spotlight anime — 30 min cache</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/ongoing</span>
+          <span class="endpoint-desc">Currently airing anime — 1 hr cache</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/alphabet/<span class="param">:letter</span></span>
+          <span class="endpoint-desc">Browse by letter A–Z — 24 hr cache</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-section" id="anime-search">
+      <div class="section-header">
+        <span class="section-num">06</span>
+        <span class="section-title">Anime — Search</span>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/search</span>
+          <span class="endpoint-desc">Full-text search across titles</span>
+        </div>
+      </div>
+      <table class="params-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">q</span></td>
+            <td><span class="param-type">string</span></td>
+            <td><span class="required-badge">required</span></td>
+            <td style="color:var(--muted)">Search query string</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">page</span></td>
+            <td><span class="param-type">integer</span></td>
+            <td><span class="optional-badge">optional</span></td>
+            <td style="color:var(--muted)">Default 1</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="content-section" id="anime-details">
+      <div class="section-header">
+        <span class="section-num">07</span>
+        <span class="section-title">Anime — Details</span>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/details/<span class="param">:id</span></span>
+          <span class="endpoint-desc">Full metadata, episodes, AniList enriched — 24 hr cache</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/details/<span class="param">:id</span>/rating</span>
+          <span class="endpoint-desc">Live global user rating for anime</span>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">Response Fields</span>
+        </div>
+        <pre><span class="cmt">// Notable fields in /details/:id response</span>
+{
+  <span class="key">"title"</span>:       <span class="str">"Attack on Titan"</span>,
+  <span class="key">"image"</span>:       <span class="str">"https://... (AniList ExtraLarge)"</span>,
+  <span class="key">"banner"</span>:      <span class="str">"https://... (AniList Banner)"</span>,
+  <span class="key">"description"</span>: <span class="str">"..."</span>,
+  <span class="key">"genres"</span>:      [<span class="str">"Action"</span>, <span class="str">"Drama"</span>],
+  <span class="key">"status"</span>:      <span class="str">"Finished Airing"</span>,
+  <span class="key">"studios"</span>:     <span class="str">"Mappa"</span>,
+  <span class="key">"duration"</span>:    <span class="str">"24 min"</span>,
+  <span class="key">"anilistId"</span>:   <span class="num">16498</span>,
+  <span class="key">"episodes"</span>:    [{ <span class="key">"number"</span>: <span class="str">"1"</span>, <span class="key">"url"</span>: <span class="str">"..."</span> }]
+}</pre>
+      </div>
+    </div>
+
+    <div class="content-section" id="anime-episode">
+      <div class="section-header">
+        <span class="section-num">08</span>
+        <span class="section-title">Anime — Episode &amp; Streaming</span>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/episode-info</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Get video sources — counts toward free limit</span>
+        </div>
+      </div>
+      <table class="params-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">url</span></td>
+            <td><span class="param-type">string</span></td>
+            <td><span class="required-badge">required</span></td>
+            <td style="color:var(--muted)">Episode URL from details endpoint (e.g. <code style="color:var(--accent)">/anime-name-episode-1</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/stream</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Proxy video stream — counts toward free limit</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/video-info</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Video metadata (content-type, size) — limited</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/<span class="param">:animeId</span>/episode/<span class="param">:episodeNum</span></span>
+          <span class="endpoint-desc">Direct episode links — 5 min cache</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/ad</span>
+          <span class="endpoint-desc">Ad video stream (MP4, range-supported, no auth)</span>
+        </div>
+      </div>
+
+      <div class="callout callout-info" style="margin-top:1rem;">
+        <span class="callout-icon">ℹ️</span>
+        <span><code style="color:var(--accent)">/stream</code> proxies the video through your server for CORS compatibility. Supports HLS (<code>.m3u8</code>) and MP4 with byte-range requests.</span>
+      </div>
+    </div>
+
+    <div class="content-section" id="anime-popular">
+      <div class="section-header">
+        <span class="section-num">09</span>
+        <span class="section-title">Anime — Popular &amp; Genres</span>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/popular</span>
+          <span class="endpoint-desc">Popular anime — 1 hr cache</span>
+        </div>
+      </div>
+      <div class="endpoint" id="anime-genres">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/genres</span>
+          <span class="endpoint-desc">All genres list — 24 hr cache</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/anime/genre/<span class="param">:genre</span></span>
+          <span class="endpoint-desc">Anime by genre slug — 1 hr cache</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ AUTH ROUTES ═══ -->
+    <div class="content-section" id="auth-register">
+      <div class="section-header">
+        <span class="section-num">10</span>
+        <span class="section-title">Auth — Register &amp; Login</span>
+      </div>
+
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/auth/send-otp</span>
+          <span class="endpoint-desc">Send OTP email to register or login</span>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">Request Body</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre>{ <span class="key">"email"</span>: <span class="str">"user@example.com"</span> }</pre>
+      </div>
+
+      <div class="endpoint" id="auth-verify">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/auth/verify-otp</span>
+          <span class="endpoint-desc">Verify code and receive JWT token</span>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">Request Body</span></div>
+        <pre>{
+  <span class="key">"email"</span>: <span class="str">"user@example.com"</span>,
+  <span class="key">"otp"</span>:   <span class="str">"482910"</span>
+}</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">Success Response</span></div>
+        <pre>{
+  <span class="key">"success"</span>: <span class="bool">true</span>,
+  <span class="key">"token"</span>:   <span class="str">"eyJhbGciOiJIUzI1NiIsInR5..."</span>,
+  <span class="key">"isNew"</span>:   <span class="bool">false</span>,
+  <span class="key">"user"</span>: {
+    <span class="key">"email"</span>:        <span class="str">"user@example.com"</span>,
+    <span class="key">"subscription"</span>: <span class="str">"free"</span>
+  }
+}</pre>
+      </div>
+    </div>
+
+    <div class="content-section" id="auth-profile">
+      <div class="section-header">
+        <span class="section-num">11</span>
+        <span class="section-title">Auth — Profile</span>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-patch">PATCH</span>
+          <span class="endpoint-path">/auth/profile</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Update name, profile image, profile border</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/auth/me</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Get current user info</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ STATS ═══ -->
+    <div class="content-section" id="stats-all">
+      <div class="section-header">
+        <span class="section-num">12</span>
+        <span class="section-title">Stats — User Data</span>
+      </div>
+      <p style="color:var(--muted); font-size:0.82rem; margin-bottom:1rem;">All stats routes require <code style="color:var(--accent)">Authorization: Bearer &lt;token&gt;</code></p>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/stats/all</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">All user stats in one call</span>
+        </div>
+      </div>
+      <div class="endpoint" id="stats-favorite">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/stats/favorite</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Toggle favorite — add or remove</span>
+        </div>
+      </div>
+      <div class="endpoint" id="stats-watchtime">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/stats/watchtime</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Increment cumulative watch time in seconds</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/stats/episode</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Mark episode as watched (deduplicated)</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/stats/rate</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Save or clear star rating (1–5) for an anime</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/stats/isfavorited?animeId=</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Check if anime is in user's favorites</span>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">GET /stats/all — Response</span></div>
+        <pre>{
+  <span class="key">"success"</span>: <span class="bool">true</span>,
+  <span class="key">"stats"</span>: {
+    <span class="key">"episodes"</span>:   <span class="num">142</span>,
+    <span class="key">"watchTime"</span>:  <span class="str">"18h 34m"</span>,
+    <span class="key">"favCount"</span>:   <span class="num">7</span>,
+    <span class="key">"avgRating"</span>:  <span class="str">"4.2"</span>,
+    <span class="key">"favorites"</span>:  [{ <span class="key">"id"</span>: <span class="str">"..."</span>, <span class="key">"title"</span>: <span class="str">"..."</span> }],
+    <span class="key">"ratings"</span>:    { <span class="str">"attack-on-titan"</span>: <span class="num">5</span> },
+    <span class="key">"settings"</span>:   { <span class="key">"autoplay"</span>: <span class="bool">true</span>, <span class="key">"hd"</span>: <span class="bool">false</span> }
+  }
+}</pre>
+      </div>
+    </div>
+
+    <!-- ═══ COMMENTS ═══ -->
+    <div class="content-section" id="comments">
+      <div class="section-header">
+        <span class="section-num">13</span>
+        <span class="section-title">Comments</span>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/comments/<span class="param">:animeId</span></span>
+          <span class="endpoint-desc">Fetch all comments for anime/episode</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/comments/count/<span class="param">:animeId</span></span>
+          <span class="endpoint-desc">Total comment count</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/comments/create</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Post comment or reply (triggers REPLY notification)</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/comments/<span class="param">:commentId</span>/like</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Toggle like (triggers LIKE notification)</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-del">DELETE</span>
+          <span class="endpoint-path">/comments/<span class="param">:commentId</span></span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Delete comment + all direct replies</span>
+        </div>
+      </div>
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ️</span>
+        <span>Pass <code style="color:var(--accent)">?episodeNum=3</code> to scope comments to a specific episode. Omit for anime-level discussion. The <code style="color:var(--accent)">parentId</code> field enables threaded replies.</span>
+      </div>
+    </div>
+
+    <!-- ═══ NOTIFICATIONS ═══ -->
+    <div class="content-section" id="notifications">
+      <div class="section-header">
+        <span class="section-num">14</span>
+        <span class="section-title">Notifications</span>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/notifications</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Fetch last 50 notifications + unread count</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-patch">PATCH</span>
+          <span class="endpoint-path">/notifications/<span class="param">:id</span>/read</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Mark single notification as read</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/notifications/read-all</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Mark all notifications as read</span>
+        </div>
+      </div>
+      <p style="color:var(--muted); font-size:0.8rem; margin-top:1rem;">Notification types: <code style="color:var(--accent)">REPLY</code> · <code style="color:var(--accent)">LIKE</code> · <code style="color:var(--accent)">RELEASE</code>. All auto-pruned after 30 days.</p>
+    </div>
+
+    <!-- ═══ ADMIN ═══ -->
+    <div class="content-section" id="admin">
+      <div class="section-header">
+        <span class="section-num">15</span>
+        <span class="section-title">Admin Routes</span>
+      </div>
+      <div class="callout callout-warn">
+        <span class="callout-icon">⚠️</span>
+        <span>All <code style="color:var(--yellow)">/admin/*</code> routes require a JWT token belonging to an email listed in the <code style="color:var(--yellow)">ADMIN_EMAILS</code> environment variable. Returns <strong>403</strong> otherwise.</span>
+      </div>
+      <div style="margin-top:1rem;">
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-get">GET</span>
+            <span class="endpoint-path">/admin/stats</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Total users, new today/week, active, banned — 1 min cache</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-get">GET</span>
+            <span class="endpoint-path">/admin/recent-users</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Latest registered users (up to 200)</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-get">GET</span>
+            <span class="endpoint-path">/admin/activity</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Recent activity log (ban, register, etc.)</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-get">GET</span>
+            <span class="endpoint-path">/admin/top-anime</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Top 10 most viewed anime</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-get">GET</span>
+            <span class="endpoint-path">/admin/active-users</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Users seen in last 5 minutes (live)</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-post">POST</span>
+            <span class="endpoint-path">/admin/ban-user</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Ban a user by email</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-post">POST</span>
+            <span class="endpoint-path">/admin/unban-user</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Unban a user by email</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-post">POST</span>
+            <span class="endpoint-path">/admin/set-subscription</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Manually set user to <code>free</code> or <code>premium</code></span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-post">POST</span>
+            <span class="endpoint-path">/admin/set-otp-bypass</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Enable or disable OTP bypass for a user</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-post">POST</span>
+            <span class="endpoint-path">/admin/clear-cache</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Flush all node-cache entries</span>
+          </div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="method-badge badge-get">GET</span>
+            <span class="endpoint-path">/admin/monthly-visits</span>
+            <span class="admin-tag">🛡 admin</span>
+            <span class="endpoint-desc">Monthly visit chart data</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAYMENTS ═══ -->
+    <div class="content-section" id="payments">
+      <div class="section-header">
+        <span class="section-num">16</span>
+        <span class="section-title">Payments — Stripe</span>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/payments/create-checkout-session</span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Create Stripe Checkout session (returns redirect URL)</span>
+        </div>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">Request Body</span></div>
+        <pre>{ <span class="key">"priceId"</span>: <span class="str">"price_1Abc123..."</span> }</pre>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-get">GET</span>
+          <span class="endpoint-path">/payments/sync-session/<span class="param">:sessionId</span></span>
+          <span class="auth-tag">🔐 JWT</span>
+          <span class="endpoint-desc">Verify payment + instantly upgrade user (bypasses webhook delay)</span>
+        </div>
+      </div>
+      <div class="endpoint">
+        <div class="endpoint-header">
+          <span class="method-badge badge-post">POST</span>
+          <span class="endpoint-path">/webhooks/stripe</span>
+          <span class="endpoint-desc">Stripe webhook — listens for <code>checkout.session.completed</code></span>
+        </div>
+      </div>
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ️</span>
+        <span>The webhook endpoint requires the raw request body for Stripe signature verification. It is mounted <strong>before</strong> the JSON body parser in <code style="color:var(--accent)">app.js</code>.</span>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // ── HEALTH CHECK ──
+  async function fetchHealth() {
+    try {
+      const r = await fetch('/api/health');
+      const d = await r.json();
+
+      const set = (id, val, cls) => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = val; el.className = 'health-value ' + cls; }
+      };
+
+      set('h-status', d.status === 'ok' ? 'OK' : d.status, d.status === 'ok' ? 'ok' : 'err');
+      set('h-mongo', d.mongo || '—', d.mongo === 'connected' ? 'ok' : 'warn');
+      set('h-redis', d.redis || '—', d.redis === 'connected' ? 'ok' : 'warn');
+      set('h-uptime', d.uptime || '—', 'ok');
+
+      const sidebarStatus = document.getElementById('sidebar-status');
+      if (sidebarStatus) sidebarStatus.textContent = 'API Online';
+    } catch (e) {
+      const sidebarStatus = document.getElementById('sidebar-status');
+      if (sidebarStatus) sidebarStatus.textContent = 'Cannot reach API';
+      ['h-status','h-mongo','h-redis','h-uptime'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = '—'; el.className = 'health-value warn'; }
+      });
+    }
+  }
+  fetchHealth();
+
+  // ── SCROLL NAV ──
+  function scrollTo(id) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    event.currentTarget && event.currentTarget.classList.add('active');
+  }
+
+  // ── COPY ──
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    navigator.clipboard.writeText(pre.innerText).then(() => {
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>
