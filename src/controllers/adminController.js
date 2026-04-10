@@ -188,14 +188,6 @@ async function setSubscription(req, res, next) {
   }
 }
 
-// ─── GET /api/admin/reports ───────────────────────────────────────────────────
-async function getReports(req, res, next) {
-  try {
-    res.json({ success: true, reports: [] });
-  } catch (error) {
-    next(error);
-  }
-}
 
 // ─── GET /api/admin/all-users ─────────────────────────────────────────────────
 async function getAllUsers(req, res, next) {
@@ -283,7 +275,7 @@ module.exports = {
   unbanUser,
   setOtpBypass,
   setSubscription,
-  getReports,
+  requireAdmin,
   getAllUsers,
   getScraperStatus,
   findWorkingDomain,

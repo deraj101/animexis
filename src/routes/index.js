@@ -11,6 +11,7 @@ const commentRoutes = require('./commentRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const userRoutes = require('./userRoutes'); // 👤 NEW
 const paymentRoutes = require('./paymentRoutes'); // 💳 NEW
+const reportRoutes = require('./reportRoutes'); // 📊 NEW
 
 // ── Health check ──────────────────────────────────────────────────────────────
 router.get('/health', (req, res) => {
@@ -30,6 +31,7 @@ router.use('/comments', commentRoutes); // ← comment system 💬
 router.use('/notifications', notificationRoutes); // ← notification system 🔔
 router.use('/users', userRoutes); // ← public profiles 👤
 router.use('/payments', paymentRoutes); // ← subscription payments 💳
+router.use('/reports',  reportRoutes);  // ← user feedback 📊
 
 // ── API info ──────────────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
@@ -43,6 +45,7 @@ router.get('/', (req, res) => {
       details:      '/api/anime/{id}',
       adminStats:   '/api/admin/stats',          // requires admin JWT
       adminUsers:   '/api/admin/recent-users',   // requires admin JWT
+      submitReport: '/api/reports/submit',       // public/user
     },
   });
 });
