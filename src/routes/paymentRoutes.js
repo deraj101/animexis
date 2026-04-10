@@ -156,15 +156,15 @@ router.get('/success', (req, res) => {
         </div>
         
         <script>
-           // Auto redirect attempt (Mobile first, then Website)
+           // Try mobile app scheme, safely fallback to Vercel
            setTimeout(() => {
-             // Try production app scheme first
-             window.location.href = 'animexis://'; 
+             try {
+                window.location.assign('animexis://subscription-success'); 
+             } catch(e) {}
              
-             // Fallback to website if app is not installed
              setTimeout(() => { 
-                window.location.href = 'https://animexisv1.vercel.app/'; 
-             }, 1200); 
+                window.location.href = 'https://animexisv1.vercel.app/subscription-success'; 
+             }, 800); 
            }, 500);
         </script>
       </body>
@@ -199,8 +199,10 @@ router.get('/cancel', (req, res) => {
 
         <script>
            setTimeout(() => {
-             window.location.href = 'animexis://';
-             setTimeout(() => { window.location.href = 'https://animexisv1.vercel.app/'; }, 1200);
+             try {
+                window.location.assign('animexis://');
+             } catch(e) {}
+             setTimeout(() => { window.location.href = 'https://animexisv1.vercel.app/'; }, 800);
            }, 500);
         </script>
       </body>
