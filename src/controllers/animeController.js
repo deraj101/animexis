@@ -2,6 +2,7 @@
 const scraperService = require('../services/scraperService');
 const userService = require('../db/userService');
 const aniListService = require('../services/aniListService');
+const episodeService = require('../services/episodeService');
 
 console.log('📝 Loading animeController...');
 
@@ -112,6 +113,16 @@ async function getAnimeDetails(req, res, next) {
             color: scraperData.color || mapping?.coverImage?.color || null,
             banner: scraperData.banner || mapping?.bannerImage || null
         };
+
+        // 🚀 ENRICH WITH EPISODE TITLES (Jikan/MAL)
+        if (response.episodes && response.anilistId) {
+            // Find mapping to get malId if not directly in scraperData
+            const malId = mapping?.malId || scraperData.malId;
+            if (malId) {
+                console.log(`[episodes] Enriching ${response.episodes.length} episodes for MAL ID: ${malId}`);
+                response.episodes = await episodeService.enrichEpisodes(response.episodes, malId);
+            }
+        }
 
         // Persist to DB for analytics / top-anime tracking
         if (response.image) {
