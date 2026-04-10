@@ -12,6 +12,7 @@ const User    = require('../db/models/userModel'); // 💬 Needed to check admin
 const Notification = require('../db/models/notificationModel'); // 🔔 For in-app alerts
 
 const { requireAuth } = require('../middleware/authMiddleware');
+const { isAdmin } = require('../controllers/adminController');
 
 
 // ── GET /api/comments/:animeId — Fetch all comments for an anime/episode ──────
@@ -31,7 +32,7 @@ router.get('/:animeId', async (req, res) => {
 
     // Dynamically inject the most up-to-date user profile info into the comments
     const userEmails = [...new Set(comments.map(c => c.userEmail))];
-    const users = await User.find({ email: { $in: userEmails } }, 'email name profile_image profile_border').lean();
+    const users = await User.find({ email: { $in: userEmails } }, 'email name profile_image profile_border subscription').lean();
     
     const userMap = users.reduce((acc, user) => {
       acc[user.email.toLowerCase()] = user;
@@ -41,11 +42,14 @@ router.get('/:animeId', async (req, res) => {
     const populatedComments = comments.map(comment => {
       const liveUser = Object.values(userMap).find(u => u.email === comment.userEmail.toLowerCase()) || userMap[comment.userEmail.toLowerCase()];
       if (liveUser) {
+        const userIsAdmin = isAdmin(liveUser.email);
         return {
           ...comment,
-          userName: liveUser.name || comment.userName,
+          userName: userIsAdmin ? 'Animexis' : (liveUser.name || comment.userName),
           profileImage: liveUser.profile_image || comment.profileImage,
-          profileBorder: liveUser.profile_border || comment.profileBorder
+          profileBorder: liveUser.profile_border || comment.profileBorder,
+          isMod: userIsAdmin || comment.isMod,
+          isPremium: liveUser.subscription === 'premium'
         };
       }
       return comment;
