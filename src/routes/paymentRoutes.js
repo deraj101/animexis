@@ -57,8 +57,8 @@ router.post('/create-checkout-session', requireAuth, async (req, res) => {
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.CLIENT_URL || 'http://localhost:8081'}?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.CLIENT_URL || 'http://localhost:8081'}/subscription`,
+      success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/payments/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/payments/cancel`,
       metadata: {
          userEmail: user.email.toLowerCase()
       }
@@ -128,6 +128,69 @@ router.get('/sync-session/:sessionId', requireAuth, async (req, res) => {
       console.error('[sync] stripe retrieval error:', error.message);
       res.status(500).json({ success: false, error: 'Sync failed.' });
    }
+});
+
+/**
+ * GET /api/payments/success
+ * Renders an HTML page that redirects back to the mobile app
+ */
+router.get('/success', (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Payment Successful</title>
+        <style>
+          body { font-family: system-ui, sans-serif; background: #080b10; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; padding: 20px;}
+          h1 { color: #22d3a0; margin-bottom: 10px; }
+          .btn { background: #DC143C; color: white; padding: 14px 28px; border-radius: 30px; text-decoration: none; font-weight: bold; margin-top: 30px; display: inline-block; box-shadow: 0 4px 15px rgba(220, 20, 60, 0.4); }
+        </style>
+      </head>
+      <body>
+        <h1>🎉 Premium Activated!</h1>
+        <p style="color: #94a3b8; max-width: 300px;">Your payment was successful. You can now close this browser and return to the Animexis app.</p>
+        <a href="exp://" class="btn" onclick="setTimeout(() => window.location.href='animexis://', 500)">Return to App</a>
+        <script>
+           // Auto redirect attempt
+           setTimeout(() => {
+             window.location.href = 'exp://'; // Expo Go
+             setTimeout(() => { window.location.href = 'animexis://'; }, 400); // Compiled App
+           }, 800);
+        </script>
+      </body>
+    </html>
+  `);
+});
+
+/**
+ * GET /api/payments/cancel
+ * Renders an HTML page that redirects back to the mobile app
+ */
+router.get('/cancel', (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Payment Cancelled</title>
+        <style>
+          body { font-family: system-ui, sans-serif; background: #080b10; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; padding: 20px;}
+          h1 { color: #f87171; margin-bottom: 10px; }
+          .btn { background: #334155; color: white; padding: 14px 28px; border-radius: 30px; text-decoration: none; font-weight: bold; margin-top: 30px; display: inline-block; }
+        </style>
+      </head>
+      <body>
+        <h1>❌ Payment Cancelled</h1>
+        <p style="color: #94a3b8; max-width: 300px;">You have not been charged. Please return to the app.</p>
+        <a href="exp://" class="btn" onclick="setTimeout(() => window.location.href='animexis://', 500)">Return to App</a>
+        <script>
+           setTimeout(() => {
+             window.location.href = 'exp://';
+             setTimeout(() => { window.location.href = 'animexis://'; }, 400);
+           }, 500);
+        </script>
+      </body>
+    </html>
+  `);
 });
 
 module.exports = router;
