@@ -148,14 +148,24 @@ router.get('/success', (req, res) => {
       </head>
       <body>
         <h1>🎉 Premium Activated!</h1>
-        <p style="color: #94a3b8; max-width: 300px;">Your payment was successful. You can now close this browser and return to the Animexis app.</p>
-        <a href="exp://" class="btn" onclick="setTimeout(() => window.location.href='animexis://', 500)">Return to App</a>
+        <p style="color: #94a3b8; max-width: 300px;">Your payment was successful!</p>
+        
+        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 30px;">
+           <a href="animexis://" class="btn" style="margin-top: 0;">Open Mobile App</a>
+           <a href="https://animexisv1.vercel.app/" class="btn" style="background: #334155; margin-top: 0; box-shadow: none;">Return to Website</a>
+        </div>
+        
         <script>
-           // Auto redirect attempt
+           // Auto redirect attempt (Mobile first, then Website)
            setTimeout(() => {
-             window.location.href = 'exp://'; // Expo Go
-             setTimeout(() => { window.location.href = 'animexis://'; }, 400); // Compiled App
-           }, 800);
+             // Try production app scheme first
+             window.location.href = 'animexis://'; 
+             
+             // Fallback to website if app is not installed
+             setTimeout(() => { 
+                window.location.href = 'https://animexisv1.vercel.app/'; 
+             }, 1200); 
+           }, 500);
         </script>
       </body>
     </html>
@@ -180,12 +190,17 @@ router.get('/cancel', (req, res) => {
       </head>
       <body>
         <h1>❌ Payment Cancelled</h1>
-        <p style="color: #94a3b8; max-width: 300px;">You have not been charged. Please return to the app.</p>
-        <a href="exp://" class="btn" onclick="setTimeout(() => window.location.href='animexis://', 500)">Return to App</a>
+        <p style="color: #94a3b8; max-width: 300px;">You have not been charged.</p>
+        
+        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 30px;">
+           <a href="animexis://" class="btn" style="margin-top: 0;">Open Mobile App</a>
+           <a href="https://animexisv1.vercel.app/" class="btn" style="background: #252f3f; margin-top: 0;">Return to Website</a>
+        </div>
+
         <script>
            setTimeout(() => {
-             window.location.href = 'exp://';
-             setTimeout(() => { window.location.href = 'animexis://'; }, 400);
+             window.location.href = 'animexis://';
+             setTimeout(() => { window.location.href = 'https://animexisv1.vercel.app/'; }, 1200);
            }, 500);
         </script>
       </body>
