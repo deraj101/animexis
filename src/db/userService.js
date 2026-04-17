@@ -71,11 +71,24 @@ async function updateProfile(email, profile) {
 }
 
 async function setSubscription(email, subscription) {
-  return await UserModel.findOneAndUpdate(
-    { email: email.toLowerCase() },
+  const normalizedEmail = email.toLowerCase();
+  const user = await UserModel.findOneAndUpdate(
+    { email: normalizedEmail },
     { $set: { subscription } },
     { returnDocument: 'after' }
   ).lean();
+
+  if (user) {
+    const isPremium = subscription === 'premium';
+    logActivity({
+      icon: isPremium ? 'star' : 'arrow-down',
+      color: isPremium ? '#eab308' : '#9090a8', // yellow for premium, dim for downgrade
+      title: isPremium ? 'Upgraded to Premium' : 'Downgraded to Free',
+      sub: normalizedEmail,
+    });
+  }
+
+  return user;
 }
 
 /**

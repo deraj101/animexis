@@ -75,7 +75,7 @@ router.get('/all', requireAuth, async (req, res) => {
         settings: user.settings ?? {},
         username: user.name || user.email?.split('@')[0] || 'Viewer',
         profile_image: user.profile_image ?? null,
-        profile_border: user.profile_border ?? null,
+        profile_border: (user.subscription === 'premium') ? user.profile_border : null,
       }
     });
   } catch (err) {

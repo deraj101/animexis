@@ -1,8 +1,9 @@
-// src/controllers/adminController.js
 const userService    = require('../db/userService');
 const scraperService = require('../services/scraperService');
 const cacheMiddleware = require('../middleware/cache');
 const jwt            = require('jsonwebtoken');
+const Feedback       = require('../db/models/feedbackModel');
+const Notification   = require('../db/models/notificationModel');
 
 // ─── Admin whitelist ─────────────────────────────────────────────────────────
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'jaredcuerbo21@gmail.com')
@@ -188,6 +189,60 @@ async function setSubscription(req, res, next) {
   }
 }
 
+// ─── GET /api/admin/reports (feedbacks) ───────────────────────────────────────
+async function getReports(req, res, next) {
+  try {
+    const reports = await Feedback.find()
+      .sort({ createdAt: -1 })
+      .populate('user', 'email')
+      .lean();
+    
+    // Map to frontend expected format
+    const formattedReports = reports.map(r => ({
+      id: r._id,
+      type: r.type,
+      message: r.message,
+      status: r.status,
+      adminReply: r.adminReply,
+      email: r.user ? r.user.email : 'Guest',
+      createdAt: r.createdAt
+    }));
+
+    res.json({ success: true, reports: formattedReports });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ─── POST /api/admin/reply-feedback ───────────────────────────────────────────
+async function replyToFeedback(req, res, next) {
+  try {
+    const { feedbackId, reply } = req.body;
+    if (!feedbackId || !reply) return res.status(400).json({ success: false, error: 'Feedback ID and reply are required.' });
+
+    const feedback = await Feedback.findById(feedbackId).populate('user', 'email');
+    if (!feedback) return res.status(404).json({ success: false, error: 'Feedback not found.' });
+
+    feedback.adminReply = reply;
+    feedback.status = 'resolved';
+    await feedback.save();
+
+    // Send notification if user exists
+    if (feedback.user && feedback.user.email) {
+      await Notification.create({
+        userEmail: feedback.user.email,
+        type: 'SUPPORT_REPLY',
+        refId: feedback._id, // Using feedback ID as ref
+        title: 'Support Response',
+        message: reply
+      });
+    }
+
+    res.json({ success: true, message: 'Reply sent successfully.' });
+  } catch (error) {
+    next(error);
+  }
+}
 
 // ─── GET /api/admin/all-users ─────────────────────────────────────────────────
 async function getAllUsers(req, res, next) {
@@ -275,11 +330,12 @@ module.exports = {
   unbanUser,
   setOtpBypass,
   setSubscription,
-  requireAdmin,
+  getReports,
   getAllUsers,
   getScraperStatus,
   findWorkingDomain,
   clearAllCache,
   getMonthlyVisits,
   getActiveUsers,
+  replyToFeedback,
 };

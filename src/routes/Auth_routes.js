@@ -207,7 +207,7 @@ router.post('/verify-otp', async (req, res) => {
     isAdmin: isAdmin(email),
     name: user.name,
     profile_image: user.profile_image,
-    profile_border: user.profile_border,
+    profile_border: (user.subscription === 'premium') ? user.profile_border : null,
     subscription: user.subscription || 'free'
   });
 });
@@ -307,7 +307,7 @@ router.post('/bypass-login', async (req, res) => {
     isAdmin: isAdmin(email),
     name: user.name,
     profile_image: user.profile_image,
-    profile_border: user.profile_border,
+    profile_border: (user.subscription === 'premium') ? user.profile_border : null,
     subscription: user.subscription || 'free'
   });
 });
@@ -327,6 +327,11 @@ async function requireAuth(req, res, next) {
     const User = require('../db/models/userModel');
     const user = await User.findOne({ email: req.userEmail });
     if (user) {
+      // 🛑 BAN CHECK: Immediately block banned users
+      if (user.is_banned) {
+        return res.status(403).json({ success: false, message: 'This account has been suspended.' });
+      }
+
       const now = new Date();
       if (!user.last_seen || user.last_seen < new Date(now.getTime() - 2 * 60 * 1000)) {
         user.last_seen = now;
@@ -351,7 +356,12 @@ router.get('/heartbeat', requireAuth, (req, res) => {
 router.post('/update-profile', requireAuth, async (req, res) => {
   // Email is taken from the verified JWT — never trust req.body.email
   const email = req.userEmail;
-  const { name, profile_image, profile_border } = req.body;
+  let { name, profile_image, profile_border } = req.body;
+
+  // Prevent free users from equipping or keeping premium borders
+  if (req.user && req.user.subscription !== 'premium') {
+    profile_border = null;
+  }
 
   try {
     const user = await userService.updateProfile(email, { name, profile_image, profile_border });
@@ -360,7 +370,7 @@ router.post('/update-profile', requireAuth, async (req, res) => {
     return res.json({ success: true, user: { 
       name: user.name, 
       profile_image: user.profile_image,
-      profile_border: user.profile_border
+      profile_border: user.subscription === 'premium' ? user.profile_border : null
     } });
   } catch (error) {
     console.error('[auth] profile update failed:', error.message);
@@ -392,7 +402,7 @@ router.get('/usage-status', async (req, res) => {
       success: true,
       subscription: user.subscription || 'free',
       profile_image: user.profile_image || null,
-      profile_border: user.profile_border || null,
+      profile_border: (user.subscription === 'premium') ? user.profile_border : null,
       count: count,
       limit: 20
     });

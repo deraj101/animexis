@@ -43,16 +43,19 @@ router.get('/:animeId', async (req, res) => {
       const liveUser = Object.values(userMap).find(u => u.email === comment.userEmail.toLowerCase()) || userMap[comment.userEmail.toLowerCase()];
       if (liveUser) {
         const userIsAdmin = isAdmin(liveUser.email);
+        const isPremium = liveUser.subscription === 'premium';
         return {
           ...comment,
           userName: userIsAdmin ? 'Animexis' : (liveUser.name || comment.userName),
           profileImage: liveUser.profile_image || comment.profileImage,
-          profileBorder: liveUser.profile_border || comment.profileBorder,
+          profileBorder: isPremium ? (liveUser.profile_border || comment.profileBorder) : null,
           isMod: userIsAdmin || comment.isMod,
-          isPremium: liveUser.subscription === 'premium'
+          isPremium: isPremium
         };
       }
-      return comment;
+      
+      // If user is deleted, strip premium borders to be safe
+      return { ...comment, profileBorder: null, isPremium: false };
     });
 
     // The frontend handles nesting based on parentId

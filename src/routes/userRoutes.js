@@ -16,7 +16,7 @@ router.get('/public-profile/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
     const user = await User.findOne({ email }).lean();
 
-    if (!user) {
+    if (!user || user.is_banned) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
@@ -27,7 +27,7 @@ router.get('/public-profile/:email', async (req, res) => {
         email: user.email,
         name: user.name || 'Anonymous Fan',
         profile_image: user.profile_image,
-        profile_border: user.profile_border,
+        profile_border: (user.subscription === 'premium') ? user.profile_border : null,
         subscription: user.subscription || 'free',
         joined_at: user.joined_at,
         isMod: user.isAdmin || false
@@ -42,6 +42,12 @@ router.get('/public-profile/:email', async (req, res) => {
 router.get('/public-activity/:email', async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
+    
+    // Check if user exists and is not banned
+    const user = await User.findOne({ email }).lean();
+    if (!user || user.is_banned) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
 
     // 1. Fetch recent comments
     const comments = await Comment.find({ userEmail: email })

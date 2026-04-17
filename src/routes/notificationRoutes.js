@@ -9,23 +9,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const Notification = require('../db/models/notificationModel');
 
-// ── Auth middleware ──────────────────────────────────────────────────────────
-function requireAuth(req, res, next) {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'Authentication required' });
-  }
-
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'changeme_use_env');
-    req.userEmail = payload.email.toLowerCase();
-    next();
-  } catch {
-    return res.status(401).json({ success: false, error: 'Invalid or expired session' });
-  }
-}
+const { requireAuth } = require('../middleware/authMiddleware');
 
 // ── GET /api/notifications — Fetch user notifications ────────────────────────
 router.get('/', requireAuth, async (req, res) => {

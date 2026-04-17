@@ -12,6 +12,7 @@ router.get('/stats',        cache(60),   admin.getStats);         // 1 min TTL �
 router.get('/recent-users', cache(30),   admin.getRecentUsers);   // 30 s
 router.get('/activity',     cache(30),   admin.getActivity);
 router.get('/top-anime',    cache(3600), admin.getTopAnime);      // 1 h — scraper data
+router.get('/reports',                   admin.getReports);
 router.get('/all-users',    cache(30),   admin.getAllUsers);
 
 // ── Mutations (no cache) ──────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ router.post('/ban-user',      admin.banUser);
 router.post('/unban-user',    admin.unbanUser);
 router.post('/set-otp-bypass', admin.setOtpBypass);
 router.post('/set-subscription', admin.setSubscription);
+router.post('/reply-feedback', admin.replyToFeedback);
 
 // ── System & Scraper ──────────────────────────────────────────────────────────
 router.get('/scraper-status', admin.getScraperStatus);

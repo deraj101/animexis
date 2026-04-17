@@ -26,7 +26,7 @@ router.post('/create-checkout-session', requireAuth, async (req, res) => {
   }
 
   const user = req.user;
-  const { priceId } = req.body;
+  const { priceId, successUrl, cancelUrl } = req.body;
 
   if (!priceId) {
     return res.status(400).json({ success: false, error: 'Price ID is required.' });
@@ -57,8 +57,8 @@ router.post('/create-checkout-session', requireAuth, async (req, res) => {
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/payments/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/payments/cancel`,
+      success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/payments/success?session_id={CHECKOUT_SESSION_ID}&client_success_url=${encodeURIComponent(successUrl || 'https://animexisv1.vercel.app/subscription-success')}`,
+      cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/payments/cancel?client_cancel_url=${encodeURIComponent(cancelUrl || 'https://animexisv1.vercel.app/')}`,
       metadata: {
          userEmail: user.email.toLowerCase()
       }
@@ -135,6 +135,14 @@ router.get('/sync-session/:sessionId', requireAuth, async (req, res) => {
  * Renders an HTML page that redirects back to the mobile app
  */
 router.get('/success', (req, res) => {
+  const sessionId = req.query.session_id || '';
+  const clientSuccessUrl = req.query.client_success_url || 'https://animexisv1.vercel.app/subscription-success';
+  
+  // Create final destination URL
+  // If it already has a query string, append with &, else with ?
+  const separator = clientSuccessUrl.includes('?') ? '&' : '?';
+  const finalUrl = `${clientSuccessUrl}${separator}session_id=${sessionId}`;
+
   res.send(`
     <html>
       <head>
@@ -151,20 +159,12 @@ router.get('/success', (req, res) => {
         <p style="color: #94a3b8; max-width: 300px;">Your payment was successful!</p>
         
         <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 30px;">
-           <a href="animexis://" class="btn" style="margin-top: 0;">Open Mobile App</a>
-           <a href="https://animexisv1.vercel.app/" class="btn" style="background: #334155; margin-top: 0; box-shadow: none;">Return to Website</a>
+           <a href="${finalUrl}" class="btn" style="margin-top: 0;">Open App</a>
         </div>
         
         <script>
-           // Try mobile app scheme, safely fallback to Vercel
            setTimeout(() => {
-             try {
-                window.location.assign('animexis://subscription-success'); 
-             } catch(e) {}
-             
-             setTimeout(() => { 
-                window.location.href = 'https://animexisv1.vercel.app/subscription-success'; 
-             }, 800); 
+              window.location.href = '${finalUrl}'; 
            }, 500);
         </script>
       </body>
@@ -177,6 +177,7 @@ router.get('/success', (req, res) => {
  * Renders an HTML page that redirects back to the mobile app
  */
 router.get('/cancel', (req, res) => {
+  const clientCancelUrl = req.query.client_cancel_url || 'https://animexisv1.vercel.app/';
   res.send(`
     <html>
       <head>
@@ -193,16 +194,12 @@ router.get('/cancel', (req, res) => {
         <p style="color: #94a3b8; max-width: 300px;">You have not been charged.</p>
         
         <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 30px;">
-           <a href="animexis://" class="btn" style="margin-top: 0;">Open Mobile App</a>
-           <a href="https://animexisv1.vercel.app/" class="btn" style="background: #252f3f; margin-top: 0;">Return to Website</a>
+           <a href="${clientCancelUrl}" class="btn" style="margin-top: 0;">Open App</a>
         </div>
 
         <script>
            setTimeout(() => {
-             try {
-                window.location.assign('animexis://');
-             } catch(e) {}
-             setTimeout(() => { window.location.href = 'https://animexisv1.vercel.app/'; }, 800);
+             window.location.href = '${clientCancelUrl}';
            }, 500);
         </script>
       </body>
