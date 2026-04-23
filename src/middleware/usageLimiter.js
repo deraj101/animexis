@@ -38,25 +38,30 @@ async function usageLimiter(req, res, next) {
     // Identify the unique content being watched (favor the episode URL)
     const contentId = req.query.url || req.originalUrl;
 
-    // Add this URL to the set for today. 
-    // .sAdd returns 1 if it's a NEW member, 0 if it was already there.
-    await redisClient.sAdd(setKey, contentId);
-    
-    // Set expiry to 24h (86400s) on the set
-    await redisClient.expire(setKey, 86400); 
+    // Check if this episode is already in today's set (re-watches are free)
+    const alreadyWatched = await redisClient.sIsMember(setKey, contentId);
 
-    // Get the current count of unique episodes (cardinality of the set)
-    const count = await redisClient.sCard(setKey);
+    if (!alreadyWatched) {
+      // Get the current count BEFORE adding
+      const currentCount = await redisClient.sCard(setKey);
 
-    if (count > 20) {
-      return res.status(403).json({
-        success: false,
-        message: 'Daily limit reached (20/20 episodes). Upgrade to Premium for unlimited access!',
-        limitReached: true,
-        count: 20, 
-        limit: 20
-      });
+      if (currentCount >= 20) {
+        return res.status(403).json({
+          success: false,
+          message: 'Daily limit reached (20/20 episodes). Upgrade to Premium for unlimited access!',
+          limitReached: true,
+          count: 20, 
+          limit: 20
+        });
+      }
+
+      // Under the limit — add this episode
+      await redisClient.sAdd(setKey, contentId);
+      await redisClient.expire(setKey, 86400);
     }
+
+    // Get the updated count
+    const count = await redisClient.sCard(setKey);
 
     // Attach usage info to response if needed
     req.usage = { count, limit: 20, subscription: 'free' };
