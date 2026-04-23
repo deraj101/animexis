@@ -13,6 +13,19 @@ const settingsSchema = new mongoose.Schema({
   subtitles:     { type: Boolean, default: true },
 }, { _id: false });
 
+const watchlistSchema = new mongoose.Schema({
+  id:    { type: String, required: true },
+  title: { type: String, required: true },
+  image: { type: String, default: null },
+  status: { 
+    type: String, 
+    enum: ['Watching', 'Completed', 'Plan to Watch', 'Dropped', 'On Hold'],
+    default: 'Plan to Watch'
+  },
+  updated_at: { type: Date, default: Date.now }
+}, { _id: false });
+
+
 const userSchema = new mongoose.Schema({
   email: {
     type: String,
@@ -33,11 +46,6 @@ const userSchema = new mongoose.Schema({
   last_seen: {
     type: Date,
     default: Date.now
-  },
-  is_banned: {
-    type: Boolean,
-    default: false,
-    index: true
   },
   otp_bypass: {
     type: Boolean,
@@ -81,6 +89,11 @@ const userSchema = new mongoose.Schema({
     type: [favoriteSchema],
     default: []
   },
+  watchlist: {
+    type: [watchlistSchema],
+    default: []
+  },
+
   settings: {
     type: settingsSchema,
     default: () => ({})

@@ -18,9 +18,6 @@ const optionalAuth = async (req, res, next) => {
     const payload = jwt.verify(token, process.env.JWT_SECRET || 'changeme_use_env');
     const user = await User.findOne({ email: payload.email.toLowerCase() });
     if (user) {
-      if (user.is_banned) {
-        return res.status(403).json({ success: false, error: 'This account has been suspended.' });
-      }
       req.user = user;
     }
   } catch (err) {

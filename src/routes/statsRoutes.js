@@ -13,7 +13,10 @@
  * GET  /api/stats/isfavorited      – check if an anime is favorited
  * PUT  /api/stats/settings         – save UI preferences
  * DELETE /api/stats/history        – clear watch history (episodes + time)
+ * GET  /api/stats/watchlist        – fetch watchlist
+ * POST /api/stats/watchlist        – update watchlist status
  */
+
 
 const express = require('express');
 const jwt = require('jsonwebtoken');
@@ -21,6 +24,8 @@ const router = express.Router();
 const UserModel = require('../db/models/userModel');
 
 const { requireAuth } = require('../middleware/authMiddleware');
+const userService = require('../db/userService');
+
 
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -76,8 +81,10 @@ router.get('/all', requireAuth, async (req, res) => {
         username: user.name || user.email?.split('@')[0] || 'Viewer',
         profile_image: user.profile_image ?? null,
         profile_border: (user.subscription === 'premium') ? user.profile_border : null,
+        watchlist: user.watchlist ?? [],
       }
     });
+
   } catch (err) {
     console.error('[stats/all]', err.message);
     return res.status(500).json({ success: false, message: 'Failed to fetch stats.' });
@@ -259,4 +266,29 @@ router.delete('/history', requireAuth, async (req, res) => {
   }
 });
 
-module.exports = router;
+// ─── GET /api/stats/watchlist ────────────────────────────────────────────────
+router.get('/watchlist', requireAuth, async (req, res) => {
+  try {
+    const list = await userService.getWatchlist(req.userEmail);
+    return res.json({ success: true, list });
+  } catch (err) {
+    console.error('[stats/watchlist/get]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to fetch watchlist.' });
+  }
+});
+
+// ─── POST /api/stats/watchlist ───────────────────────────────────────────────
+router.post('/watchlist', requireAuth, async (req, res) => {
+  const { id, title, image, status } = req.body;
+  if (!id || !status) return res.status(400).json({ success: false, message: 'id and status required.' });
+
+  try {
+    const user = await userService.updateWatchlistStatus(req.userEmail, { id, title, image, status });
+    return res.json({ success: true, watchlist: user.watchlist });
+  } catch (err) {
+    console.error('[stats/watchlist/post]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to update watchlist.' });
+  }
+});
+
+module.exports = router;

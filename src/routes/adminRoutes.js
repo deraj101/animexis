@@ -16,17 +16,36 @@ router.get('/reports',                   admin.getReports);
 router.get('/all-users',    cache(30),   admin.getAllUsers);
 
 // ── Mutations (no cache) ──────────────────────────────────────────────────────
-router.post('/ban-user',      admin.banUser);
-router.post('/unban-user',    admin.unbanUser);
+
 router.post('/set-otp-bypass', admin.setOtpBypass);
 router.post('/set-subscription', admin.setSubscription);
 router.post('/reply-feedback', admin.replyToFeedback);
 
-// ── System & Scraper ──────────────────────────────────────────────────────────
-router.get('/scraper-status', admin.getScraperStatus);
-router.post('/scraper-find-domain', admin.findWorkingDomain);
-router.post('/clear-cache', admin.clearAllCache);
+// ── System ──────────────────────────────────────────────────────────
 router.get('/monthly-visits', admin.getMonthlyVisits);
 router.get('/active-users',   admin.getActiveUsers);   // no cache — always live
+// ── Custom Anime CMS ────────────────────────────────────────────────────────
+router.post('/anime', admin.createCustomAnime);
+router.get('/anime', admin.getCustomAnimes);
+router.put('/anime/:id', admin.updateCustomAnime);
+router.delete('/anime/:id', admin.deleteCustomAnime);
 
-module.exports = router;
+// ── Custom Episodes ─────────────────────────────────────────────────────────
+router.post('/episodes', admin.addCustomEpisode);
+router.get('/episodes/:animeId', admin.getCustomEpisodes);
+router.put('/episodes/:id', admin.updateCustomEpisode);
+router.delete('/episodes/:id', admin.deleteCustomEpisode);
+
+// ── User Management (Extended) ──────────────────────────────────────────────
+router.put('/users/:email', admin.updateUser);
+router.delete('/users/:email', admin.deleteUser);
+
+// ── Comment Moderation ──────────────────────────────────────────────────────
+router.get('/comments/all', admin.getAllComments);
+router.delete('/comments/:id', admin.deleteComment);
+router.delete('/feedbacks/:id', admin.deleteReport);
+
+// ── System Announcements ────────────────────────────────────────────────────
+router.post('/send-notification', admin.sendGlobalNotification);
+
+module.exports = router;

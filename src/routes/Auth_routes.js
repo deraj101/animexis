@@ -114,8 +114,6 @@ router.post('/send-otp', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid email address.' });
   if (!password || password.length < 6)
     return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
-  if (await userService.isBanned(email))
-    return res.status(403).json({ success: false, message: 'This account has been suspended.' });
 
   // User must exist to sign in
   const existing = await userService.findUser(email);
@@ -184,8 +182,6 @@ router.post('/verify-otp', async (req, res) => {
 
   if (!email || !otp)
     return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
-  if (await userService.isBanned(email))
-    return res.status(403).json({ success: false, message: 'This account has been suspended.' });
 
   const result = await verifyOtp('signin', email, otp);
   if (!result.ok)
@@ -222,8 +218,6 @@ router.post('/forgot-password', async (req, res) => {
   const existing = await userService.findUser(email);
   if (!existing)
     return res.status(404).json({ success: false, message: 'No account found with this email.' });
-  if (await userService.isBanned(email))
-    return res.status(403).json({ success: false, message: 'This account has been suspended.' });
 
   const otp = generateOtp();
   await storeOtp('reset', email, otp);
@@ -280,9 +274,6 @@ router.post('/bypass-login', async (req, res) => {
 
   if (!email) return res.status(400).json({ success: false, message: 'Email required.' });
   if (!password) return res.status(400).json({ success: false, message: 'Password required.' });
-
-  if (await userService.isBanned(email))
-    return res.status(403).json({ success: false, message: 'This account has been suspended.' });
   
   if (!(await userService.isOtpBypassed(email)))
     return res.status(403).json({ success: false, message: 'OTP bypass not enabled for this account.' });
@@ -327,11 +318,6 @@ async function requireAuth(req, res, next) {
     const User = require('../db/models/userModel');
     const user = await User.findOne({ email: req.userEmail });
     if (user) {
-      // 🛑 BAN CHECK: Immediately block banned users
-      if (user.is_banned) {
-        return res.status(403).json({ success: false, message: 'This account has been suspended.' });
-      }
-
       const now = new Date();
       if (!user.last_seen || user.last_seen < new Date(now.getTime() - 2 * 60 * 1000)) {
         user.last_seen = now;

@@ -122,6 +122,28 @@ router.get('/episode-info', usageLimiter, cacheMiddleware(300), async (req, res)
 
         console.log(`🎬 Fetching episode info for: ${url}`);
 
+        // 🚀 HANDLE CUSTOM EPISODES
+        const CustomEpisode = require('../db/models/customEpisodeModel');
+        const mongoose = require('mongoose');
+        
+        // If it's a valid MongoDB ID, it's likely a custom episode
+        if (mongoose.Types.ObjectId.isValid(url)) {
+            const ep = await CustomEpisode.findById(url);
+            if (ep) {
+                return res.json({
+                    success: true,
+                    title: ep.title || `Episode ${ep.number}`,
+                    iframe: null,
+                    videoSources: [{
+                        url: ep.videoUrl,
+                        isM3U8: ep.videoUrl.includes('.m3u8'),
+                        quality: 'auto'
+                    }],
+                    downloadLinks: [{ url: ep.videoUrl, label: 'Custom Stream' }]
+                });
+            }
+        }
+
         const scraperService = require('../services/scraperService');
 
         if (url.match(/\/\d+$/)) {
@@ -178,6 +200,16 @@ router.post('/:animeId/view',   animeController.logAnimeView);
 router.get('/continue-watching',    animeController.getContinueWatching);
 router.post('/continue-watching',   animeController.saveContinueWatching);
 router.delete('/continue-watching', animeController.deleteContinueWatching);
+
+// Watch History (The Full List)
+router.get('/watch-history',    animeController.getWatchHistory);
+router.delete('/watch-history', animeController.clearWatchHistory);
+
+// Search History
+router.get('/search-history',    animeController.getSearchHistory);
+router.delete('/search-history', animeController.clearSearchHistory);
+
+
 
 // Test route — must be BEFORE /:id to avoid being swallowed by the catch-all
 router.get('/test', (req, res) => {

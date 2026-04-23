@@ -21,11 +21,6 @@ async function requireAuth(req, res, next) {
        return res.status(401).json({ success: false, error: 'User no longer exists' });
     }
 
-    // 🛑 BAN CHECK: Immediately block banned users
-    if (user.is_banned) {
-      return res.status(403).json({ success: false, error: 'This account has been suspended.' });
-    }
-
     // 🔥 Update last_seen if it's been more than 2 minutes since last update
     const now = new Date();
     const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);

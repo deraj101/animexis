@@ -3,6 +3,8 @@ const scraperService = require('../services/scraperService');
 const userService = require('../db/userService');
 const aniListService = require('../services/aniListService');
 const episodeService = require('../services/episodeService');
+const CustomAnime = require('../db/models/customAnimeModel');
+const CustomEpisode = require('../db/models/customEpisodeModel');
 
 console.log('📝 Loading animeController...');
 
@@ -37,12 +39,33 @@ async function searchAnime(req, res, next) {
             return res.status(400).json({ success: false, error: 'Missing search query parameter "q"' });
         }
 
+        // Custom search prepended
+        const customResults = await CustomAnime.find({ title: { $regex: q, $options: 'i' } }).lean();
+        const formattedCustom = customResults.map(a => ({
+            id: a.slug,
+            title: a.title,
+            image: a.image,
+            url: `/category/${a.slug}`,
+            releaseDate: a.releaseDate,
+            isCustom: true
+        }));
+
         let results = await scraperService.searchAnime(q, page);
 
         // Enrich with AniList High-Res images
         if (results.success && results.results) {
             results.results = await aniListService.enrichAnimeList(results.results);
+            if (page === 1 && formattedCustom.length > 0) {
+                 results.results = [...formattedCustom, ...results.results];
+            }
+            
+            // Log search history if email provided
+            const email = req.query.email;
+            if (email && page === 1) {
+              userService.logSearchHistory(email, q).catch(() => {});
+            }
         }
+
 
         res.json({ success: true, timestamp: new Date().toISOString(), ...results });
     } catch (error) {
@@ -60,6 +83,41 @@ async function getAnimeDetails(req, res, next) {
 
         if (!id) {
             return res.status(400).json({ success: false, error: 'Missing anime ID parameter' });
+        }
+
+        // 1. Check CustomAnime
+        const customAnime = await CustomAnime.findOne({ slug: id }).lean();
+        if (customAnime) {
+            const customEps = await CustomEpisode.find({ animeId: id }).sort({ number: 1 }).lean();
+            
+            const response = {
+                success: true,
+                timestamp: new Date().toISOString(),
+                episodes: customEps.map(e => ({
+                    id: e._id.toString(),
+                    number: e.number.toString(),
+                    title: e.title || `Episode ${e.number}`,
+                    url: e._id.toString() 
+                })),
+                episodeCount: customEps.length,
+                slug: customAnime.slug,
+                title: customAnime.title,
+                image: customAnime.image,
+                banner: customAnime.banner || customAnime.image,
+                description: customAnime.description,
+                genres: customAnime.genres,
+                type: customAnime.type,
+                released: customAnime.releaseDate,
+                status: customAnime.status,
+                otherNames: "",
+                synonyms: [],
+                score: null,
+                studios: 'Custom',
+                duration: null,
+                premiered: customAnime.releaseDate,
+                isCustom: true 
+            };
+            return res.json(response);
         }
 
         // 🚀 SMART CACHE BUST: If Studios/Duration are missing, it might be an old cache. 🕵️‍♂️
@@ -165,6 +223,26 @@ async function getEpisodeLinks(req, res, next) {
                 success: false,
                 error: 'Missing anime ID or episode number'
             });
+        }
+
+        // Check if custom episode exists
+        const customEps = await CustomEpisode.find({ animeId }).lean();
+        if (customEps.length > 0) {
+             const ep = customEps.find(e => String(e.number) === String(episodeNum));
+             if (ep) {
+                 return res.json({
+                     success: true,
+                     timestamp: new Date().toISOString(),
+                     animeTitle: "Custom Anime",
+                     episode: episodeNum,
+                     download: ep.videoUrl, // fallback
+                     sources: [{
+                         url: ep.videoUrl, 
+                         isM3U8: ep.videoUrl.includes('.m3u8'),
+                         quality: 'auto'
+                     }]
+                 });
+             }
         }
 
         const animeDetails = await scraperService.getAnimeDetails(animeId);
@@ -298,7 +376,11 @@ async function saveContinueWatching(req, res, next) {
         await userService.upsertContinueWatching({
             email, anime_id: animeId, title, image, episode_url: episodeUrl, episode_number: episodeNumber
         });
+        await userService.logWatchHistory({
+            email, anime_id: animeId, title, image, episode_url: episodeUrl, episode_number: episodeNumber
+        });
         res.json({ success: true });
+
     } catch (error) {
         res.json({ success: false, error: error.message });
     }
@@ -314,6 +396,52 @@ async function deleteContinueWatching(req, res, next) {
         res.json({ success: false, error: error.message });
     }
 }
+
+async function getWatchHistory(req, res, next) {
+    try {
+        const email = req.query.email;
+        if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+        const list = await userService.getWatchHistory(email);
+        res.json({ success: true, list });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+}
+
+async function clearWatchHistory(req, res, next) {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+        await userService.clearWatchHistory(email);
+        res.json({ success: true });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+}
+
+async function getSearchHistory(req, res, next) {
+    try {
+        const { email } = req.query;
+        if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+        const list = await userService.getSearchHistory(email);
+        res.json({ success: true, list });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+}
+
+async function clearSearchHistory(req, res, next) {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+        await userService.clearSearchHistory(email);
+        res.json({ success: true });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+}
+
+
 
 async function getSpotlightAnime(req, res, next) {
     try {
@@ -409,5 +537,8 @@ module.exports = {
     getContinueWatching,
     saveContinueWatching,
     deleteContinueWatching,
-
+    getWatchHistory,
+    clearWatchHistory,
+    getSearchHistory,
+    clearSearchHistory,
 };

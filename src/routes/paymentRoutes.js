@@ -57,8 +57,8 @@ router.post('/create-checkout-session', requireAuth, async (req, res) => {
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/payments/success?session_id={CHECKOUT_SESSION_ID}&client_success_url=${encodeURIComponent(successUrl || 'https://animexisv1.vercel.app/subscription-success')}`,
-      cancel_url: `${process.env.CLIENT_URL || 'http://localhost:3000'}/api/payments/cancel?client_cancel_url=${encodeURIComponent(cancelUrl || 'https://animexisv1.vercel.app/')}`,
+      success_url: `${process.env.CLIENT_URL || 'http://10.230.214.17:3000'}/api/payments/success?session_id={CHECKOUT_SESSION_ID}&client_success_url=${encodeURIComponent(successUrl || 'https://animexisv1.vercel.app/subscription-success')}`,
+      cancel_url: `${process.env.CLIENT_URL || 'http://10.230.214.17:3000'}/api/payments/cancel?client_cancel_url=${encodeURIComponent(cancelUrl || 'https://animexisv1.vercel.app/')}`,
       metadata: {
          userEmail: user.email.toLowerCase()
       }

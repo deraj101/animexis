@@ -3,6 +3,10 @@ const UserModel = require('./models/userModel');
 const Activity = require('./models/activityModel');
 const Comment = require('./models/commentModel');
 const { AnimeView, AppVisit, ContinueWatching } = require('./models/analyticsModels');
+const WatchHistory = require('./models/watchHistoryModel');
+const SearchHistory = require('./models/searchHistoryModel');
+
+
 
 
 /**
@@ -108,25 +112,6 @@ async function setPasswordHash(email, hash) {
   );
 }
 
-/**
- * Ban / Unban
- */
-async function banUser(email) {
-  const normalizedEmail = email.toLowerCase();
-  await UserModel.updateOne({ email: normalizedEmail }, { is_banned: true });
-  logActivity({ icon: 'ban', color: '#ef4444', title: 'User banned', sub: normalizedEmail });
-}
-
-async function unbanUser(email) {
-  const normalizedEmail = email.toLowerCase();
-  await UserModel.updateOne({ email: normalizedEmail }, { is_banned: false });
-  logActivity({ icon: 'checkmark-circle', color: '#22c55e', title: 'User unbanned', sub: normalizedEmail });
-}
-
-async function isBanned(email) {
-  const user = await UserModel.findOne({ email: email.toLowerCase() }, 'is_banned').lean();
-  return user?.is_banned || false;
-}
 
 /**
  * OTP Bypass
@@ -160,17 +145,16 @@ async function getStats() {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const [totalUsers, newToday, newThisWeek, activeThisWeek, bannedCount] = await Promise.all([
-    UserModel.countDocuments({ is_banned: false }),
-    UserModel.countDocuments({ joined_at: { $gte: today }, is_banned: false }),
-    UserModel.countDocuments({ joined_at: { $gte: lastWeek }, is_banned: false }),
-    UserModel.countDocuments({ last_seen: { $gte: lastWeek }, is_banned: false }),
-    UserModel.countDocuments({ is_banned: true })
+  const [totalUsers, newToday, newThisWeek, activeThisWeek] = await Promise.all([
+    UserModel.countDocuments({}),
+    UserModel.countDocuments({ joined_at: { $gte: today } }),
+    UserModel.countDocuments({ joined_at: { $gte: lastWeek } }),
+    UserModel.countDocuments({ last_seen: { $gte: lastWeek } })
   ]);
 
   // Daily growth for chart (last 14 days)
   const growthData = await UserModel.aggregate([
-    { $match: { joined_at: { $gte: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000) }, is_banned: false } },
+    { $match: { joined_at: { $gte: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000) } } },
     { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$joined_at" } }, count: { $sum: 1 } } },
     { $sort: { _id: 1 } },
     { $project: { day: "$_id", count: 1, _id: 0 } }
@@ -181,7 +165,6 @@ async function getStats() {
     newUsersToday: newToday,
     newUsersThisWeek: newThisWeek,
     activeThisWeek,
-    bannedCount,
     dailyGrowth: growthData
   };
 }
@@ -255,6 +238,87 @@ async function deleteContinueWatching(email, anime_id) {
   return await ContinueWatching.deleteOne({ email: email.toLowerCase(), anime_id });
 }
 
+async function logWatchHistory(data) {
+  const { email, anime_id, title, image, episode_url, episode_number } = data;
+  return await WatchHistory.create({
+    email: email.toLowerCase(),
+    anime_id,
+    title,
+    image,
+    episode_url,
+    episode_number,
+    watched_at: new Date()
+  });
+}
+
+async function getWatchHistory(email, limit = 50) {
+  return await WatchHistory.find({ email: email.toLowerCase() })
+    .sort({ watched_at: -1 })
+    .limit(limit)
+    .lean();
+}
+
+async function clearWatchHistory(email) {
+  return await WatchHistory.deleteMany({ email: email.toLowerCase() });
+}
+
+/**
+ * Search History
+ */
+async function logSearchHistory(email, query) {
+  // Prune old entries to keep it clean (e.g., keep last 20)
+  await SearchHistory.create({ email: email.toLowerCase(), query });
+}
+
+async function getSearchHistory(email, limit = 10) {
+  return await SearchHistory.find({ email: email.toLowerCase() })
+    .sort({ searched_at: -1 })
+    .limit(limit)
+    .lean();
+}
+
+async function clearSearchHistory(email) {
+  return await SearchHistory.deleteMany({ email: email.toLowerCase() });
+}
+
+/**
+ * Watchlist / Plan to Watch
+ */
+async function updateWatchlistStatus(email, anime) {
+  const { id, title, image, status } = anime;
+  const normalizedEmail = email.toLowerCase();
+  
+  if (status === 'None') {
+    return await UserModel.findOneAndUpdate(
+      { email: normalizedEmail },
+      { $pull: { watchlist: { id } } },
+      { returnDocument: 'after' }
+    ).lean();
+  }
+
+  // Update if exists, else push
+  const user = await UserModel.findOne({ email: normalizedEmail });
+  if (!user) return null;
+
+  const existingIdx = user.watchlist.findIndex(w => w.id === id);
+  if (existingIdx > -1) {
+    user.watchlist[existingIdx].status = status;
+    user.watchlist[existingIdx].updated_at = new Date();
+  } else {
+    user.watchlist.push({ id, title, image, status, updated_at: new Date() });
+  }
+  
+  await user.save();
+  return user.toObject();
+}
+
+async function getWatchlist(email) {
+  const user = await UserModel.findOne({ email: email.toLowerCase() }, 'watchlist').lean();
+  return user?.watchlist || [];
+}
+
+
+
 async function getMonthlyVisits(limit = 12) {
   return await AppVisit.find({}).sort({ year_month: 1 }).limit(limit).lean();
 }
@@ -314,9 +378,7 @@ module.exports = {
   deleteUser,
   getPasswordHash,
   setPasswordHash,
-  banUser,
-  unbanUser,
-  isBanned,
+
   setOtpBypass,
   isOtpBypassed,
   getAllBypassed,
@@ -333,4 +395,12 @@ module.exports = {
   getContinueWatching,
   deleteContinueWatching,
   getAnimeGlobalRating,
+  logWatchHistory,
+  getWatchHistory,
+  clearWatchHistory,
+  logSearchHistory,
+  getSearchHistory,
+  clearSearchHistory,
+  updateWatchlistStatus,
+  getWatchlist,
 };

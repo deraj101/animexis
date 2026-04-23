@@ -16,7 +16,7 @@ router.get('/public-profile/:email', async (req, res) => {
     const email = req.params.email.toLowerCase();
     const user = await User.findOne({ email }).lean();
 
-    if (!user || user.is_banned) {
+    if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
@@ -43,12 +43,6 @@ router.get('/public-activity/:email', async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
     
-    // Check if user exists and is not banned
-    const user = await User.findOne({ email }).lean();
-    if (!user || user.is_banned) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
     // 1. Fetch recent comments
     const comments = await Comment.find({ userEmail: email })
       .sort({ ts: -1 })
