@@ -291,4 +291,21 @@ router.post('/watchlist', requireAuth, async (req, res) => {
   }
 });
 
+// ─── POST /api/stats/push-token ─────────────────────────────────────────────
+router.post('/push-token', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ success: false, message: 'token required.' });
+
+  try {
+    await UserModel.updateOne(
+      { email: req.userEmail },
+      { $set: { expo_push_token: token } }
+    );
+    return res.json({ success: true, message: 'Push token saved.' });
+  } catch (err) {
+    console.error('[stats/push-token]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to save push token.' });
+  }
+});
+
 module.exports = router;

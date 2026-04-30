@@ -3,6 +3,7 @@ const scraperService = require('../services/scraperService');
 const userService = require('../db/userService');
 const aniListService = require('../services/aniListService');
 const episodeService = require('../services/episodeService');
+const animePaheScraper = require('../services/animePaheScraper');
 const CustomAnime = require('../db/models/customAnimeModel');
 const CustomEpisode = require('../db/models/customEpisodeModel');
 
@@ -267,6 +268,9 @@ async function getEpisodeLinks(req, res, next) {
 
         const episodeData = await scraperService.getEpisodeLinks(episode.url);
 
+        // NOTE: AnimePahe sources are now fetched on-demand via /api/anime/pahe-sources
+        // This avoids blocking episode playback with slow Playwright browser launches
+
         res.json({
             success: true,
             timestamp: new Date().toISOString(),
@@ -371,10 +375,11 @@ async function getContinueWatching(req, res, next) {
 
 async function saveContinueWatching(req, res, next) {
     try {
-        const { email, animeId, title, image, episodeUrl, episodeNumber } = req.body;
+        const { email, animeId, title, image, episodeUrl, episodeNumber, progress, duration, completed } = req.body;
         if (!email || !animeId) return res.status(400).json({ success: false, error: 'Missing data' });
         await userService.upsertContinueWatching({
-            email, anime_id: animeId, title, image, episode_url: episodeUrl, episode_number: episodeNumber
+            email, anime_id: animeId, title, image, episode_url: episodeUrl, episode_number: episodeNumber,
+            progress, duration, completed
         });
         await userService.logWatchHistory({
             email, anime_id: animeId, title, image, episode_url: episodeUrl, episode_number: episodeNumber
@@ -436,6 +441,17 @@ async function clearSearchHistory(req, res, next) {
         if (!email) return res.status(400).json({ success: false, error: 'Email required' });
         await userService.clearSearchHistory(email);
         res.json({ success: true });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+}
+
+async function getEpisodeProgress(req, res, next) {
+    try {
+        const { email, animeId } = req.query;
+        if (!email || !animeId) return res.status(400).json({ success: false, error: 'Email and animeId required' });
+        const entry = await userService.getEpisodeProgress(email, animeId);
+        res.json({ success: true, progress: entry || null });
     } catch (error) {
         res.json({ success: false, error: error.message });
     }
@@ -519,6 +535,15 @@ async function getAnimeByLetter(req, res, next) {
         next(error);
     }
 }
+async function downloadM3u8(req, res) {
+    const { url } = req.query;
+    if (!url || !url.includes('.m3u8')) {
+        return res.status(400).json({ success: false, error: 'Valid M3U8 URL is required' });
+    }
+    
+    const downloadProxyService = require('../services/downloadProxyService');
+    downloadProxyService.streamAsMp4(url, res);
+}
 
 module.exports = {
     getAnimeByLetter,
@@ -541,4 +566,6 @@ module.exports = {
     clearWatchHistory,
     getSearchHistory,
     clearSearchHistory,
+    getEpisodeProgress,
+    downloadM3u8,
 };

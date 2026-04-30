@@ -106,7 +106,7 @@ class ScraperService {
                     'Referer': this.baseUrl,
                     'Origin': this.baseUrl
                 },
-                timeout: 15000,
+                timeout: 30000,
                 maxRedirects: 5,
                 validateStatus: status => status < 400,
                 httpsAgent: this.httpsAgent
@@ -619,6 +619,130 @@ class ScraperService {
     }
 }
 
+    /**
+     * Resolve direct video sources from an iframe URL 🎥
+     */
+    async resolveIframeSource(iframeUrl) {
+        try {
+            console.log(`🔍 Resolving iframe source: ${iframeUrl}`);
+            const $ = await this.fetchPage(iframeUrl);
+            
+            const videoSources = [];
+            
+            // Look for script tags containing source links
+            const scripts = $('script').map((i, el) => $(el).html()).get();
+            for (const script of scripts) {
+                if (script) {
+                    // Regex for gogocdn/standard embed patterns
+                    const matches = script.match(/(?:file|src|link)\s*[:=]\s*["'](https?:\/\/[^"']+\.(?:m3u8|mp4|mkv)[^"']*)["']/g);
+                    if (matches) {
+                        matches.forEach(match => {
+                            const url = match.match(/https?:\/\/[^"']+/)[0];
+                            if (!videoSources.some(s => s.url === url)) {
+                                videoSources.push({
+                                    url: url,
+                                    quality: 'Auto',
+                                    type: url.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4'
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+
+            // Fallback: search the whole page text for video links
+            if (videoSources.length === 0) {
+                 const textMatches = $.html().match(/(https?:\/\/[^\s"'`]+\.(?:m3u8|mp4|mkv)(?:\?[^\s"'`]*)?)/g);
+                 if (textMatches) {
+                     textMatches.forEach(url => {
+                         if (!videoSources.some(s => s.url === url)) {
+                             videoSources.push({
+                                 url: url,
+                                 quality: 'Auto',
+                                 type: url.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4'
+                             });
+                         }
+                     });
+                 }
+            }
+
+            console.log(`✅ Resolved ${videoSources.length} sources from iframe`);
+            return videoSources;
+        } catch (error) {
+            console.error('Error resolving iframe source:', error.message);
+            return [];
+        }
+    }
+
+    /**
+     * Resolve direct video sources from a download page 📦
+     */
+    async resolveDownloadPage(downloadUrl) {
+        try {
+            console.log(`🔍 Resolving download page: ${downloadUrl}`);
+            
+            // Extract referer from URL
+            const referer = downloadUrl.split('/').slice(0, 3).join('/');
+            
+            const response = await axios.get(downloadUrl, {
+                httpsAgent: this.httpsAgent,
+                headers: {
+                    ...HEADERS,
+                    'Referer': referer,
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                },
+                timeout: 10000
+            });
+            
+            const $ = cheerio.load(response.data);
+            const sources = [];
+
+            // Targeted selectors for GogoAnime download pages (GogoCDN/StreamWish etc)
+            $('.mirror_link a, .dowload a, .download a').each((i, el) => {
+                const href = $(el).attr('href');
+                const text = $(el).text().trim();
+                if (href) {
+                    const isDirect = href.match(/\.(mp4|mkv|webm)/i);
+                    const isHLS = href.includes('.m3u8');
+                    
+                    if (isDirect || isHLS || href.includes('gogocdn.com')) {
+                        sources.push({
+                            url: href,
+                            quality: text.match(/\d+p/i)?.[0] || href.match(/\d+p/i)?.[0] || 'Auto',
+                            type: isHLS ? 'application/x-mpegURL' : 'video/mp4',
+                            label: text || 'Download'
+                        });
+                    }
+                }
+            });
+
+            // If still nothing, look for ANY direct video links in the page
+            if (sources.length === 0) {
+                $('a[href*=".mp4"], a[href*=".m3u8"]').each((i, el) => {
+                    const href = $(el).attr('href');
+                    const text = $(el).text().trim();
+                    if (href) {
+                        sources.push({
+                            url: href,
+                            quality: text.match(/\d+p/i)?.[0] || 'Auto',
+                            type: href.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4'
+                        });
+                    }
+                });
+            }
+
+            // Prioritization: Prefer MP4 over M3U8 for downloads
+            const mp4Sources = sources.filter(s => s.type === 'video/mp4');
+            const finalSources = mp4Sources.length > 0 ? mp4Sources : sources;
+
+            console.log(`✅ Resolved ${finalSources.length} sources from download page`);
+            return finalSources;
+        } catch (error) {
+            console.error('Error resolving download page:', error.message);
+            return [];
+        }
+    }
+
     async getEpisodeLinks(episodeUrl) {
         try {
             let url = episodeUrl;
@@ -710,18 +834,34 @@ class ScraperService {
                     }
                 });
 
+                // 🚀 FIX: data-video attributes are EMBED PAGE URLs (vibeplayer, otakuhg, etc.)
+                // NOT direct video files. Collect them as embeds and resolve the best one.
+                const embedUrls = [];
+                const currentDomain = new URL(this.baseUrl).hostname;
                 $('[data-video], [data-src], [data-url]').each((i, el) => {
                     const dataVideo = $(el).attr('data-video') || $(el).attr('data-src') || $(el).attr('data-url');
                     if (dataVideo) {
-                        const videoUrl = dataVideo.startsWith('//') ? 'https:' + dataVideo : 
+                        const embedUrl = dataVideo.startsWith('//') ? 'https:' + dataVideo : 
                                         (dataVideo.startsWith('http') ? dataVideo : this.baseUrl + dataVideo);
-                        episodeData.videoSources.push({
-                            url: videoUrl,
-                            quality: 'Auto',
-                            type: 'video/mp4'
-                        });
+                        // Skip URLs pointing back to the same site (not embeds)
+                        try {
+                            const embedHost = new URL(embedUrl).hostname;
+                            if (embedHost === currentDomain) return;
+                        } catch(e) { return; }
+                        const label = $(el).text().trim().replace(/Choose this server/gi, '').trim();
+                        if (!embedUrls.some(e => e.url === embedUrl)) {
+                            embedUrls.push({ url: embedUrl, label });
+                        }
                     }
                 });
+
+                if (embedUrls.length > 0) {
+                    console.log(`🔗 Found ${embedUrls.length} embed URLs, resolving streams...`);
+                    // Use first embed as the iframe for the player
+                    episodeData.iframe = embedUrls[0].url;
+                    // Store all embeds as server options for the frontend player
+                    episodeData.servers = embedUrls;
+                }
             }
 
             $('video, .video-js, .jw-video, .player-video, #video-player').each((i, el) => {
@@ -796,6 +936,26 @@ class ScraperService {
                             episodeData.iframe = iframeMatches[0];
                         }
                     }
+                }
+            }
+
+            // 🚀 NEW: If still no sources but we have an iframe, try to resolve it!
+            if (episodeData.videoSources.length === 0 && episodeData.iframe) {
+                const resolvedSources = await this.resolveIframeSource(episodeData.iframe);
+                if (resolvedSources && resolvedSources.length > 0) {
+                    episodeData.videoSources.push(...resolvedSources);
+                }
+            }
+
+            // 🚀 NEW: If we don't have a direct MP4 source (only M3U8 embeds), try to resolve download links to get MP4s
+            const hasDirectMp4 = episodeData.videoSources.some(s => s.type === 'video/mp4' && !s.url.includes('.m3u8'));
+            if (!hasDirectMp4 && episodeData.downloadLinks.length > 0) {
+                console.log('📦 Attempting to resolve a source from download links...');
+                // We pick the first one (usually highest quality or primary mirror)
+                const dlLink = episodeData.downloadLinks[0].url;
+                const dlSources = await this.resolveDownloadPage(dlLink);
+                if (dlSources && dlSources.length > 0) {
+                    episodeData.videoSources.push(...dlSources);
                 }
             }
 
@@ -995,9 +1155,8 @@ class ScraperService {
     async getSpotlightAnime() {
         try {
             console.log('✨ Fetching spotlight anime from modern mirror');
-            // Explicitly use the modern mirror for the spotlight carousel
-            const spotlightUrl = 'https://anitaku.cv/home/';
-            const $ = await this.fetchPage(spotlightUrl);
+            const spotlightUrl = this.baseUrl + '/';
+            const $ = await this.fetchPage(spotlightUrl, 0, { timeout: 5000 });
             const spotlight = [];
 
             const slides = $('.swiper-wrapper .swiper-slide, #top-spotlight .swiper-slide, .spotlight-section .swiper-slide');
@@ -1030,7 +1189,7 @@ class ScraperService {
                 const resolve = (url) => {
                     if (!url) return null;
                     if (url.startsWith('http')) return url;
-                    return url.startsWith('//') ? 'https:' + url : 'https://anitaku.cv' + (url.startsWith('/') ? '' : '/') + url;
+                    return url.startsWith('//') ? 'https:' + url : this.baseUrl + (url.startsWith('/') ? '' : '/') + url;
                 };
 
                 background = resolve(background);
@@ -1039,7 +1198,7 @@ class ScraperService {
                 let watchUrl = $el.find('.btn-watch').attr('href') || '#';
                 let detailsUrl = $el.find('.btn-details, .hero-info h2 a').attr('href') || '#';
 
-                const resolveLink = (l) => l && !l.startsWith('http') ? 'https://anitaku.cv' + (l.startsWith('/') ? '' : '/') + l : l;
+                const resolveLink = (l) => l && !l.startsWith('http') ? this.baseUrl + (l.startsWith('/') ? '' : '/') + l : l;
                 watchUrl = resolveLink(watchUrl);
                 detailsUrl = resolveLink(detailsUrl);
 

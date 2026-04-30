@@ -219,10 +219,14 @@ async function logAppVisit(identifier = 'anonymous') {
 }
 
 async function upsertContinueWatching(data) {
-  const { email, anime_id, title, image, episode_url, episode_number } = data;
+  const { email, anime_id, title, image, episode_url, episode_number, progress, duration, completed } = data;
+  const update = { title, image, episode_url, episode_number, updated_at: new Date() };
+  if (progress !== undefined)  update.progress  = progress;
+  if (duration !== undefined)  update.duration   = duration;
+  if (completed !== undefined) update.completed  = completed;
   await ContinueWatching.findOneAndUpdate(
     { email: email.toLowerCase(), anime_id },
-    { $set: { title, image, episode_url, episode_number, updated_at: new Date() } },
+    { $set: update },
     { upsert: true, returnDocument: 'after' }
   );
 }
@@ -238,17 +242,33 @@ async function deleteContinueWatching(email, anime_id) {
   return await ContinueWatching.deleteOne({ email: email.toLowerCase(), anime_id });
 }
 
+async function getEpisodeProgress(email, anime_id) {
+  // Return the current continue-watching entry for this anime
+  // Contains episode_number, progress, duration, completed
+  const entry = await ContinueWatching.findOne(
+    { email: email.toLowerCase(), anime_id },
+    'episode_number progress duration completed episode_url'
+  ).lean();
+  return entry;
+}
+
 async function logWatchHistory(data) {
   const { email, anime_id, title, image, episode_url, episode_number } = data;
-  return await WatchHistory.create({
-    email: email.toLowerCase(),
-    anime_id,
-    title,
-    image,
-    episode_url,
-    episode_number,
-    watched_at: new Date()
-  });
+  
+  // 1. Upsert history entry — prevents duplicates when progress syncs fire repeatedly
+  const history = await WatchHistory.findOneAndUpdate(
+    { email: email.toLowerCase(), anime_id, episode_number: String(episode_number) },
+    { $set: { title, image, episode_url, watched_at: new Date() } },
+    { upsert: true, returnDocument: 'after' }
+  );
+
+  // 2. Update user's lifetime unique episodes count
+  await UserModel.updateOne(
+    { email: email.toLowerCase() },
+    { $addToSet: { watched_episodes: episode_url } }
+  );
+
+  return history;
 }
 
 async function getWatchHistory(email, limit = 50) {
@@ -394,6 +414,7 @@ module.exports = {
   upsertContinueWatching,
   getContinueWatching,
   deleteContinueWatching,
+  getEpisodeProgress,
   getAnimeGlobalRating,
   logWatchHistory,
   getWatchHistory,

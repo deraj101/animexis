@@ -27,6 +27,9 @@ const continueWatchingSchema = new mongoose.Schema({
   image: { type: String, default: null },
   episode_url: { type: String, required: true },
   episode_number: { type: String, required: true },
+  progress: { type: Number, default: 0 },     // seconds watched so far
+  duration: { type: Number, default: 0 },     // total episode length in seconds
+  completed: { type: Boolean, default: false },
   updated_at: { type: Date, default: Date.now }
 });
 

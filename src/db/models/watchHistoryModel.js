@@ -37,4 +37,7 @@ const watchHistorySchema = new mongoose.Schema({
 // Optimization for clearing and fetching
 watchHistorySchema.index({ email: 1, watched_at: -1 });
 
+// Enforce one entry per user + anime + episode (prevents duplicates)
+watchHistorySchema.index({ email: 1, anime_id: 1, episode_number: 1 }, { unique: true });
+
 module.exports = mongoose.model('WatchHistory', watchHistorySchema);

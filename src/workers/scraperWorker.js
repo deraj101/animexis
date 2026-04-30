@@ -3,6 +3,7 @@ const scraperService = require('../services/scraperService');
 const User           = require('../db/models/userModel');
 const Notification   = require('../db/models/notificationModel');
 const redisClient      = require('../db/redisClient');
+const { sendPushNotification } = require('../services/notificationService');
 
 // Parse REDIS_URL for BullMQ connection options
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
@@ -45,23 +46,29 @@ function startWorkers() {
                 // 🔔 Check for new releases to notify users
                 if (data.episodes && data.episodes.length > 0) {
                     for (const ep of data.episodes) {
-                        const animeId = ep.id;
+                        // 🕵️‍♂️ Extract the actual Series Slug from the URL (e.g., "/one-piece-episode-1100" -> "one-piece")
+                        const animeId = ep.url?.split('/').pop().replace(/-episode-\d+$/, '') || ep.slug?.replace(/-episode-\d+$/, '') || ep.id;
                         const epNum   = ep.episodeNumber;
                         const redisKey = `notified_ep:${animeId}`;
 
                         // Check if we've already notified for this episode
                         const lastNotified = await redisClient.get(redisKey);
                         
-                        // Simple comparison: if the current epNum is strictly greater than last notified
-                        // (handles '122' > '121' correctly as strings for most cases, or convert to Int)
                         if (!lastNotified || parseInt(epNum) > parseInt(lastNotified)) {
-                            console.log(`📡 New Release detected: ${ep.title} Ep ${epNum}`);
+                            console.log(`📡 New Release detected: "${ep.title}" (Series: ${animeId}) Ep ${epNum}`);
                             
-                            // Find all users who have this anime in their favorites
-                            const usersToNotify = await User.find({ "favorites.id": animeId });
+                            // Find all users who have this anime in their favorites OR watchlist
+                            const usersToNotify = await User.find({
+                                $or: [
+                                    { "favorites.id": animeId },
+                                    { "watchlist.id": animeId }
+                                ]
+                            });
                             
                             if (usersToNotify.length > 0) {
                                 console.log(`🔔 Notifying ${usersToNotify.length} fans for ${ep.title}`);
+                                
+                                // 1. Save in-app notifications
                                 const notifications = usersToNotify.map(u => ({
                                     userEmail: u.email,
                                     type: 'RELEASE',
@@ -70,8 +77,21 @@ function startWorkers() {
                                     title: 'New Release 🎥',
                                     message: `A new episode is out: ${ep.title} Episode ${epNum}!`
                                 }));
-                                
                                 await Notification.insertMany(notifications);
+
+                                // 2. Send Push Notifications
+                                const pushTokens = usersToNotify
+                                    .filter(u => u.expo_push_token)
+                                    .map(u => u.expo_push_token);
+
+                                if (pushTokens.length > 0) {
+                                    await sendPushNotification(
+                                        pushTokens,
+                                        'New Episode! 🎥',
+                                        `${ep.title} Episode ${epNum} is now available.`,
+                                        { animeId, episodeNum: epNum }
+                                    );
+                                }
                             }
 
                             // Update Redis to mark this episode as notified

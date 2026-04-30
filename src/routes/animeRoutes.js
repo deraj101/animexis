@@ -82,6 +82,27 @@ router.get('/stream', usageLimiter, async (req, res) => {
     }
 });
 
+// 🚀 NEW: Download proxy for M3U8 -> MP4
+router.get('/download-m3u8', usageLimiter, animeController.downloadM3u8);
+
+// 🚀 AnimePahe direct MP4 sources (called by download button, not on every episode load)
+router.get('/pahe-sources', usageLimiter, async (req, res) => {
+    try {
+        const { title, episode } = req.query;
+        if (!title || !episode) {
+            return res.status(400).json({ success: false, error: 'Missing title or episode parameter' });
+        }
+
+        console.log(`[AnimePahe] 📥 Download request: "${title}" Ep ${episode}`);
+        const animePaheScraper = require('../services/animePaheScraper');
+        const result = await animePaheScraper.getDownloadLinks(title, episode);
+        res.json(result);
+    } catch (error) {
+        console.error('[AnimePahe] pahe-sources error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Get video info endpoint (limit enforced)
 router.get('/video-info', usageLimiter, async (req, res) => {
     try {
@@ -159,9 +180,8 @@ router.get('/episode-info', usageLimiter, cacheMiddleware(300), async (req, res)
 
         const episodeData = await scraperService.getEpisodeLinks(url);
 
-        if (!episodeData.iframe && episodeData.videoSources.length === 0) {
-            console.log('⚠️ No video sources found for URL:', url);
-        }
+        // NOTE: AnimePahe sources are now fetched separately via /api/anime/pahe-sources
+        // This avoids blocking episode playback with slow Playwright calls
 
         res.json({
             success: true,
@@ -205,11 +225,17 @@ router.delete('/continue-watching', animeController.deleteContinueWatching);
 router.get('/watch-history',    animeController.getWatchHistory);
 router.delete('/watch-history', animeController.clearWatchHistory);
 
+// Episode Progress (for progress bars on episode cards)
+router.get('/episode-progress', animeController.getEpisodeProgress);
+
 // Search History
 router.get('/search-history',    animeController.getSearchHistory);
 router.delete('/search-history', animeController.clearSearchHistory);
 
 
+
+// Download M3U8 (Proxy for downloading HLS as MP4)
+router.get('/download-m3u8',   animeController.downloadM3u8);
 
 // Test route — must be BEFORE /:id to avoid being swallowed by the catch-all
 router.get('/test', (req, res) => {

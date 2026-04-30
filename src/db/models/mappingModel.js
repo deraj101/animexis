@@ -39,6 +39,11 @@ const mappingSchema = new mongoose.Schema({
   duration: Number,
   studios: [String],
   format: String,
+  trailer: {
+    id: String,
+    site: String,
+    thumbnail: String
+  },
   lastSync: { 
     type: Date, 
     default: Date.now 

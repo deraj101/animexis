@@ -46,8 +46,15 @@ connectDB().then(async () => {
         console.warn('💡 Set REDIS_URL in your environment variables to enable Redis.');
     }
 
-    app.listen(PORT, () => {
-        console.log(`🚀 Server running at http://localhost:${PORT}`);
+    const networkInterfaces = require('os').networkInterfaces();
+    const localIp = Object.values(networkInterfaces)
+        .flat()
+        .find(i => i.family === 'IPv4' && !i.internal)?.address || '0.0.0.0';
+
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 Server running at http://0.0.0.0:${PORT}`);
+        console.log(`🌍 Local Access: http://localhost:${PORT}`);
+        console.log(`🌍 Network Access: http://${localIp}:${PORT}`);
         console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`📦 DB Mode: MongoDB Atlas`);
     });

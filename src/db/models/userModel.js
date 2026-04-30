@@ -106,6 +106,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  expo_push_token: {
+    type: String,
+    default: null
+  },
 
 }, {
   timestamps: false // We manually manage joined_at and last_seen for legacy compatibility

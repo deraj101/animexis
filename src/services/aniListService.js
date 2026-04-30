@@ -37,6 +37,11 @@ query ($search: String) {
         isAnimationStudio
       }
     }
+    trailer {
+      id
+      site
+      thumbnail
+    }
   }
 }
 `;
@@ -68,7 +73,8 @@ class AniListService {
               duration: mapping.duration ? `${mapping.duration} min` : (anime.duration || null),
               studios: mapping.studios && mapping.studios.length ? mapping.studios : (anime.studios || []),
               category: (anime.category && anime.category !== "TV") ? anime.category : (mapping.format || anime.category || "TV"),
-              anilistId: mapping.anilistId
+              anilistId: mapping.anilistId,
+              trailer: mapping.trailer
             };
           }
           return anime;
@@ -90,7 +96,7 @@ class AniListService {
 
     // 1. Check local DB cache
     let mapping = await Mapping.findOne({ gogoSlug: slug });
-    if (mapping) return mapping;
+    if (mapping && mapping.trailer?.id) return mapping;
 
     // 2. Fetch from AniList
     try {
@@ -136,28 +142,32 @@ class AniListService {
 
       if (!media) return null;
 
-      // 3. Create mapping
-      mapping = await Mapping.create({
-        gogoSlug: slug,
-        anilistId: media.id,
-        malId: media.idMal,
-        title: media.title,
-        coverImage: media.coverImage,
-        bannerImage: media.bannerImage,
-        averageScore: media.averageScore,
-        description: media.description,
-        genres: [
-          ...(media.genres || []),
-          ...(media.tags ? media.tags.map(t => t.name) : [])
-        ].slice(0, 12), // Keep a rich but sane list
-        status: media.status,
-        season: media.season,
-        seasonYear: media.seasonYear,
-        duration: media.duration,
-        studios: media.studios?.nodes?.filter(s => s.isAnimationStudio).map(s => s.name) || [],
-        format: media.format,
-        lastSync: new Date()
-      });
+      // 3. Create/Update mapping
+      mapping = await Mapping.findOneAndUpdate(
+        { gogoSlug: slug },
+        {
+          anilistId: media.id,
+          malId: media.idMal,
+          title: media.title,
+          coverImage: media.coverImage,
+          bannerImage: media.bannerImage,
+          averageScore: media.averageScore,
+          description: media.description,
+          genres: [
+            ...(media.genres || []),
+            ...(media.tags ? media.tags.map(t => t.name) : [])
+          ].slice(0, 12),
+          status: media.status,
+          season: media.season,
+          seasonYear: media.seasonYear,
+          duration: media.duration,
+          studios: media.studios?.nodes?.filter(s => s.isAnimationStudio).map(s => s.name) || [],
+          format: media.format,
+          trailer: media.trailer,
+          lastSync: new Date()
+        },
+        { new: true, upsert: true }
+      );
 
       console.log(`[anilist] ✅ mapped: ${identifier} -> ${media.id}`);
       return mapping;
