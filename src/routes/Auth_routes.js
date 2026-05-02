@@ -16,9 +16,15 @@
  */
 
 const express     = require('express');
-const nodemailer  = require('nodemailer');
-const jwt         = require('jsonwebtoken');
-const bcrypt      = require('bcrypt');
+const nodemailer = require('nodemailer');
+const bcrypt     = require('bcrypt');
+const jwt        = require('jsonwebtoken');
+const dns        = require('dns');
+
+// Force IPv4 globally for DNS resolution to avoid ENETUNREACH on IPv6-only environments (like Render)
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 const router      = express.Router();
 const userService = require('../db/userService');
 const { isAdmin } = require('../controllers/adminController');
@@ -33,7 +39,8 @@ const transporter = nodemailer.createTransport({
   connectionTimeout: 10000, // 10s timeout
   greetingTimeout: 5000,
   socketTimeout: 15000,
-  family: 4, // Force IPv4 to avoid ENETUNREACH on IPv6-only resolution
+  family: 4, // Force IPv4 resolution
+  localAddress: '0.0.0.0', // Force local binding to IPv4
 });
 
 // In-memory fallback if Redis is down
