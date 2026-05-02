@@ -30,7 +30,13 @@ const transporter = nodemailer.createTransport({
   port: 465,
   secure: true,
   auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
+  connectionTimeout: 10000, // 10s timeout
+  greetingTimeout: 5000,
+  socketTimeout: 15000,
 });
+
+// In-memory fallback if Redis is down
+const otpFallbackMap = new Map();
 
 const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 
@@ -55,31 +61,69 @@ const BCRYPT_ROUNDS = 10;
 async function storeOtp(type, email, otp) {
   const codeKey    = `otp:${type}:${email}`;
   const attemptsKey = `otp-attempts:${type}:${email}`;
-  await redisClient.set(codeKey,     otp, { EX: OTP_EXPIRY_S });
-  await redisClient.set(attemptsKey, '0', { EX: OTP_EXPIRY_S });
+  
+  try {
+    if (redisClient.isOpen) {
+      await redisClient.set(codeKey,     otp, { EX: OTP_EXPIRY_S });
+      await redisClient.set(attemptsKey, '0', { EX: OTP_EXPIRY_S });
+      return;
+    }
+  } catch (err) {
+    console.warn('⚠️ Redis storeOtp failed, using memory fallback:', err.message);
+  }
+
+  // Fallback to memory
+  otpFallbackMap.set(codeKey, { otp, attempts: 0, expires: Date.now() + (OTP_EXPIRY_S * 1000) });
 }
 
 async function verifyOtp(type, email, otp) {
   const codeKey     = `otp:${type}:${email}`;
   const attemptsKey = `otp-attempts:${type}:${email}`;
 
-  const stored   = await redisClient.get(codeKey);
-  const attempts = parseInt(await redisClient.get(attemptsKey) || '0');
+  try {
+    if (redisClient.isOpen) {
+      const stored   = await redisClient.get(codeKey);
+      const attempts = parseInt(await redisClient.get(attemptsKey) || '0');
 
-  if (!stored)              return { ok: false, message: 'No code found. Please request a new one.' };
-  if (attempts >= MAX_ATTEMPTS) {
-    await redisClient.del(codeKey);
-    await redisClient.del(attemptsKey);
+      if (!stored) return { ok: false, message: 'No code found. Please request a new one.' };
+      
+      if (attempts >= MAX_ATTEMPTS) {
+        await redisClient.del(codeKey);
+        await redisClient.del(attemptsKey);
+        return { ok: false, message: 'Too many attempts. Please request a new code.' };
+      }
+
+      if (stored !== String(otp)) {
+        await redisClient.incr(attemptsKey);
+        return { ok: false, message: 'Incorrect code. Please try again.' };
+      }
+
+      await redisClient.del(codeKey);
+      await redisClient.del(attemptsKey);
+      return { ok: true };
+    }
+  } catch (err) {
+    console.warn('⚠️ Redis verifyOtp failed, using memory fallback:', err.message);
+  }
+
+  // Fallback to memory
+  const data = otpFallbackMap.get(codeKey);
+  if (!data || data.expires < Date.now()) {
+    otpFallbackMap.delete(codeKey);
+    return { ok: false, message: 'No code found or expired. Please request a new one.' };
+  }
+
+  if (data.attempts >= MAX_ATTEMPTS) {
+    otpFallbackMap.delete(codeKey);
     return { ok: false, message: 'Too many attempts. Please request a new code.' };
   }
-  if (stored !== String(otp)) {
-    await redisClient.incr(attemptsKey);
+
+  if (data.otp !== String(otp)) {
+    data.attempts += 1;
     return { ok: false, message: 'Incorrect code. Please try again.' };
   }
 
-  // Success — clean up
-  await redisClient.del(codeKey);
-  await redisClient.del(attemptsKey);
+  otpFallbackMap.delete(codeKey);
   return { ok: true };
 }
 
@@ -107,71 +151,81 @@ async function sendOtpEmail(to, otp) {
 
 // ─── POST /api/auth/send-otp — sign in (user must exist) ─────────────────────
 router.post('/send-otp', async (req, res) => {
-  const email    = (req.body.email    || '').trim().toLowerCase();
-  const password = (req.body.password || '').trim();
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    return res.status(400).json({ success: false, message: 'Invalid email address.' });
-  if (!password || password.length < 6)
-    return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
-
-  // User must exist to sign in
-  const existing = await userService.findUser(email);
-  if (!existing)
-    return res.status(404).json({ success: false, message: 'No account found with this email. Please create an account first.' });
-
-  // Verify password
-  const storedHash = await userService.getPasswordHash(email);
-  if (storedHash) {
-    const valid = await bcrypt.compare(password, storedHash);
-    if (!valid)
-      return res.status(401).json({ success: false, message: 'Incorrect password.' });
-  } else {
-    // Legacy account without a password — set it now (migration path)
-    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    await userService.setPasswordHash(email, hash);
-  }
-
-  const otp = generateOtp();
-  await storeOtp('signin', email, otp);
   try {
-    await sendOtpEmail(email, otp);
-    console.log(`[auth] sign-in OTP sent to ${email}`);
-    return res.json({ success: true, message: 'OTP sent to your email.' });
-  } catch (err) {
-    console.error('[auth] email send failed:', err.message);
-    return res.status(500).json({ success: false, message: 'Failed to send email. Try again.' });
+    const email    = (req.body.email    || '').trim().toLowerCase();
+    const password = (req.body.password || '').trim();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ success: false, message: 'Invalid email address.' });
+    if (!password || password.length < 6)
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
+
+    // User must exist to sign in
+    const existing = await userService.findUser(email);
+    if (!existing)
+      return res.status(404).json({ success: false, message: 'No account found with this email. Please create an account first.' });
+
+    // Verify password
+    const storedHash = await userService.getPasswordHash(email);
+    if (storedHash) {
+      const valid = await bcrypt.compare(password, storedHash);
+      if (!valid)
+        return res.status(401).json({ success: false, message: 'Incorrect password.' });
+    } else {
+      // Legacy account without a password — set it now (migration path)
+      const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      await userService.setPasswordHash(email, hash);
+    }
+
+    const otp = generateOtp();
+    await storeOtp('signin', email, otp);
+    try {
+      await sendOtpEmail(email, otp);
+      console.log(`[auth] sign-in OTP sent to ${email}`);
+      return res.json({ success: true, message: 'OTP sent to your email.' });
+    } catch (err) {
+      console.error('[auth] email send failed:', err.message);
+      return res.status(500).json({ success: false, message: 'Failed to send email. Try again.' });
+    }
+  } catch (error) {
+    console.error('[auth] send-otp crash:', error.message);
+    return res.status(500).json({ success: false, message: 'An internal error occurred.' });
   }
 });
 
 // ─── POST /api/auth/register — create account (user must NOT exist) ──────────
 router.post('/register', async (req, res) => {
-  const email    = (req.body.email    || '').trim().toLowerCase();
-  const password = (req.body.password || '').trim();
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    return res.status(400).json({ success: false, message: 'Invalid email address.' });
-  if (!password || password.length < 6)
-    return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
-
-  // Reject if account already exists
-  const existing = await userService.findUser(email);
-  if (existing)
-    return res.status(409).json({ success: false, message: 'An account with this email already exists. Please sign in instead.' });
-
-  // Hash + store password (creates a stub user row) then send OTP
-  const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  await userService.setPasswordHash(email, hash);
-
-  const otp = generateOtp();
-  await storeOtp('signin', email, otp);
   try {
-    await sendOtpEmail(email, otp);
-    console.log(`[auth] register OTP sent to ${email}`);
-    return res.json({ success: true, message: 'OTP sent to your email.' });
-  } catch (err) {
-    console.error('[auth] email send failed:', err.message);
-    return res.status(500).json({ success: false, message: 'Failed to send email. Try again.' });
+    const email    = (req.body.email    || '').trim().toLowerCase();
+    const password = (req.body.password || '').trim();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ success: false, message: 'Invalid email address.' });
+    if (!password || password.length < 6)
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
+
+    // Reject if account already exists
+    const existing = await userService.findUser(email);
+    if (existing)
+      return res.status(409).json({ success: false, message: 'An account with this email already exists. Please sign in instead.' });
+
+    // Hash + store password (creates a stub user row) then send OTP
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    await userService.setPasswordHash(email, hash);
+
+    const otp = generateOtp();
+    await storeOtp('signin', email, otp);
+    try {
+      await sendOtpEmail(email, otp);
+      console.log(`[auth] register OTP sent to ${email}`);
+      return res.json({ success: true, message: 'OTP sent to your email.' });
+    } catch (err) {
+      console.error('[auth] email send failed:', err.message);
+      return res.status(500).json({ success: false, message: 'Failed to send email. Try again.' });
+    }
+  } catch (error) {
+    console.error('[auth] register crash:', error.message);
+    return res.status(500).json({ success: false, message: 'Registration failed due to an internal error.' });
   }
 });
 

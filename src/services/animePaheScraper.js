@@ -231,8 +231,13 @@ class AnimePaheScraper {
 
             // Wait for DDoS-Guard
             for (let i = 0; i < 30; i++) {
-                const content = await page.innerText('body');
-                if (!content.includes('Checking') && !content.includes('DDoS') && content.length > 100) {
+                const title = await page.title();
+                const content = await page.innerText('body').catch(() => '');
+                if (!title.includes('Just a moment') && 
+                    !content.includes('Checking') && 
+                    !content.includes('DDoS') && 
+                    !content.includes('security verification') &&
+                    content.length > 100) {
                     console.log(`[AnimePahe] ✅ Play page loaded`);
                     break;
                 }
@@ -364,8 +369,14 @@ class AnimePaheScraper {
 
                 // Wait for DDoS-Guard on pahe.win
                 for (let i = 0; i < 15; i++) {
-                    const content = await page.innerText('body');
-                    if (!content.includes('Checking') && !content.includes('DDoS')) break;
+                    const title = await page.title();
+                    const content = await page.innerText('body').catch(() => '');
+                    if (!title.includes('Just a moment') && 
+                        !content.includes('Checking') && 
+                        !content.includes('DDoS') && 
+                        !content.includes('security verification')) {
+                        break;
+                    }
                     await page.waitForTimeout(1000);
                 }
 
@@ -520,10 +531,29 @@ class AnimePaheScraper {
         const url = page.url();
         console.log(`[AnimePahe] 🧪 Extracting from: ${url}`);
 
-        // Wait for Cloudflare/DDoS-Guard
-        for (let i = 0; i < 15; i++) {
-            const content = await page.innerText('body');
-            if (!content.includes('Checking') && !content.includes('DDoS') && !content.includes('Cloudflare')) break;
+        // Wait for Cloudflare/DDoS-Guard/Turnstile
+        for (let i = 0; i < 30; i++) {
+            const title = await page.title();
+            const content = await page.innerText('body').catch(() => '');
+            if (!title.includes('Just a moment') && 
+                !content.includes('Checking') && 
+                !content.includes('DDoS') && 
+                !content.includes('security verification') &&
+                !content.includes('Cloudflare') &&
+                content.length > 50) {
+                break;
+            }
+            // Try to click Turnstile if it appears
+            try {
+                const turnstile = page.locator('iframe[src*="challenges.cloudflare.com"]').first();
+                if (await turnstile.count() > 0) {
+                    const box = await turnstile.boundingBox();
+                    if (box) {
+                        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+                    }
+                }
+            } catch (e) {}
+            
             await page.waitForTimeout(1000);
         }
 

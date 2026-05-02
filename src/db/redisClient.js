@@ -9,9 +9,11 @@ const isTLS = REDIS_URL.startsWith('rediss://');
 
 const redisClient = createClient({
   url: REDIS_URL,
+  disableOfflineQueue: true, // Fail immediately if not connected (prevents hangs)
   socket: {
     tls: isTLS,
     rejectUnauthorized: false, // required for Upstash free tier
+    connectTimeout: 10000,    // 10s timeout for connection attempts
     reconnectStrategy: (retries) => {
       if (retries > 10) {
         console.warn('⚠️ Redis: gave up reconnecting after 10 attempts.');
