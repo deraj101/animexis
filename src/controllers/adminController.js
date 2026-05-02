@@ -304,7 +304,7 @@ async function updateCustomAnime(req, res, next) {
   try {
     const { id } = req.params;
     const updates = req.body;
-    const anime = await CustomAnime.findByIdAndUpdate(id, updates, { new: true }).lean();
+    const anime = await CustomAnime.findByIdAndUpdate(id, updates, { returnDocument: 'after' }).lean();
     res.json({ success: true, anime: { ...anime, _id: anime._id.toString() } });
   } catch (err) { next(err); }
 }
@@ -352,7 +352,7 @@ async function updateCustomEpisode(req, res, next) {
   try {
     const { id } = req.params;
     const { number, title, videoUrl, thumbnail } = req.body;
-    const ep = await CustomEpisode.findByIdAndUpdate(id, { number, title, videoUrl, thumbnail }, { new: true }).lean();
+    const ep = await CustomEpisode.findByIdAndUpdate(id, { number, title, videoUrl, thumbnail }, { returnDocument: 'after' }).lean();
     if (!ep) return res.status(404).json({ success: false, error: 'Episode not found' });
     res.json({ success: true, episode: { ...ep, _id: ep._id.toString() } });
   } catch (err) { 
@@ -373,7 +373,7 @@ async function updateUser(req, res, next) {
     if (subscription !== undefined) updateData.subscription = subscription;
     
     const User = require('../db/models/userModel');
-    const user = await User.findOneAndUpdate({ email: email.toLowerCase() }, { $set: updateData }, { new: true }).lean();
+    const user = await User.findOneAndUpdate({ email: email.toLowerCase() }, { $set: updateData }, { returnDocument: 'after' }).lean();
     res.json({ success: true, user });
   } catch (err) { next(err); }
 }

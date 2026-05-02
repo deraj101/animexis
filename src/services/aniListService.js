@@ -56,34 +56,47 @@ class AniListService {
   async enrichAnimeList(animeList) {
     if (!animeList || !animeList.length) return animeList;
 
-    const enriched = await Promise.all(
-      animeList.map(async (anime) => {
-        try {
-          const mapping = await this.getMapping(anime.slug || anime.title);
-          if (mapping) {
-            // ONLY overwrite with AniList if it's actually found/exists 📸
-            const hdImage = mapping.coverImage?.extraLarge || mapping.coverImage?.large;
-            return {
-              ...anime,
-              image: hdImage || anime.image, // Prefer HD, fallback to native 🖼️
-              poster: hdImage || anime.image,
-              background: mapping.bannerImage || anime.banner || null,
-              banner: mapping.bannerImage || anime.banner || null,
-              genres: mapping.genres && mapping.genres.length ? mapping.genres : (anime.genres || []),
-              duration: mapping.duration ? `${mapping.duration} min` : (anime.duration || null),
-              studios: mapping.studios && mapping.studios.length ? mapping.studios : (anime.studios || []),
-              category: (anime.category && anime.category !== "TV") ? anime.category : (mapping.format || anime.category || "TV"),
-              anilistId: mapping.anilistId,
-              trailer: mapping.trailer
-            };
+    const enriched = [];
+    const batchSize = 5; // Process in small batches to respect AniList rate limits
+
+    for (let i = 0; i < animeList.length; i += batchSize) {
+      const batch = animeList.slice(i, i + batchSize);
+      
+      const results = await Promise.all(
+        batch.map(async (anime) => {
+          try {
+            const mapping = await this.getMapping(anime.slug || anime.title);
+            if (mapping) {
+              const hdImage = mapping.coverImage?.extraLarge || mapping.coverImage?.large;
+              return {
+                ...anime,
+                image: hdImage || anime.image,
+                poster: hdImage || anime.image,
+                background: mapping.bannerImage || anime.banner || null,
+                banner: mapping.bannerImage || anime.banner || null,
+                genres: mapping.genres && mapping.genres.length ? mapping.genres : (anime.genres || []),
+                duration: mapping.duration ? `${mapping.duration} min` : (anime.duration || null),
+                studios: mapping.studios && mapping.studios.length ? mapping.studios : (anime.studios || []),
+                category: (anime.category && anime.category !== "TV") ? anime.category : (mapping.format || anime.category || "TV"),
+                anilistId: mapping.anilistId,
+                trailer: mapping.trailer
+              };
+            }
+            return anime;
+          } catch (err) {
+            console.warn(`[anilist] enrich skip: ${anime.title}`, err.message);
+            return anime;
           }
-          return anime;
-        } catch (err) {
-          console.warn(`[anilist] enrich skip: ${anime.title}`, err.message);
-          return anime;
-        }
-      })
-    );
+        })
+      );
+      
+      enriched.push(...results);
+      
+      // Add a small delay between batches if there are more items
+      if (i + batchSize < animeList.length) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
 
     return enriched;
   }
@@ -166,7 +179,7 @@ class AniListService {
           trailer: media.trailer,
           lastSync: new Date()
         },
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
       );
 
       console.log(`[anilist] ✅ mapped: ${identifier} -> ${media.id}`);

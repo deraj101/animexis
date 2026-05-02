@@ -33,6 +33,7 @@ const transporter = nodemailer.createTransport({
   connectionTimeout: 10000, // 10s timeout
   greetingTimeout: 5000,
   socketTimeout: 15000,
+  family: 4, // Force IPv4 to avoid ENETUNREACH on IPv6-only resolution
 });
 
 // In-memory fallback if Redis is down
