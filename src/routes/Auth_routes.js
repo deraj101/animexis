@@ -27,8 +27,8 @@ const redisClient = require('../db/redisClient');
 // ─── Gmail transporter ─────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  port: 587,
+  secure: false, // true for 465, false for 587/STARTTLS
   auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
   connectionTimeout: 10000, // 10s timeout
   greetingTimeout: 5000,
@@ -58,14 +58,18 @@ const BCRYPT_ROUNDS = 10;
 //         otp-attempts:<type>:<email> → attempt counter (TTL = OTP_EXPIRY_S)
 // <type> is 'signin' or 'reset'
 
-async function storeOtp(type, email, otp) {
-  const codeKey    = `otp:${type}:${email}`;
+async function storeOtp(type, email, otp, data = null) {
+  const codeKey     = `otp:${type}:${email}`;
   const attemptsKey = `otp-attempts:${type}:${email}`;
+  const dataKey     = `otp-data:${type}:${email}`;
   
   try {
     if (redisClient.isOpen) {
       await redisClient.set(codeKey,     otp, { EX: OTP_EXPIRY_S });
       await redisClient.set(attemptsKey, '0', { EX: OTP_EXPIRY_S });
+      if (data) {
+        await redisClient.set(dataKey, JSON.stringify(data), { EX: OTP_EXPIRY_S });
+      }
       return;
     }
   } catch (err) {
@@ -73,12 +77,18 @@ async function storeOtp(type, email, otp) {
   }
 
   // Fallback to memory
-  otpFallbackMap.set(codeKey, { otp, attempts: 0, expires: Date.now() + (OTP_EXPIRY_S * 1000) });
+  otpFallbackMap.set(codeKey, { 
+    otp, 
+    attempts: 0, 
+    expires: Date.now() + (OTP_EXPIRY_S * 1000),
+    data 
+  });
 }
 
 async function verifyOtp(type, email, otp) {
   const codeKey     = `otp:${type}:${email}`;
   const attemptsKey = `otp-attempts:${type}:${email}`;
+  const dataKey     = `otp-data:${type}:${email}`;
 
   try {
     if (redisClient.isOpen) {
@@ -90,6 +100,7 @@ async function verifyOtp(type, email, otp) {
       if (attempts >= MAX_ATTEMPTS) {
         await redisClient.del(codeKey);
         await redisClient.del(attemptsKey);
+        await redisClient.del(dataKey);
         return { ok: false, message: 'Too many attempts. Please request a new code.' };
       }
 
@@ -98,9 +109,14 @@ async function verifyOtp(type, email, otp) {
         return { ok: false, message: 'Incorrect code. Please try again.' };
       }
 
+      // Success - fetch data and cleanup
+      const dataStr = await redisClient.get(dataKey);
+      const data = dataStr ? JSON.parse(dataStr) : null;
+
       await redisClient.del(codeKey);
       await redisClient.del(attemptsKey);
-      return { ok: true };
+      await redisClient.del(dataKey);
+      return { ok: true, data };
     }
   } catch (err) {
     console.warn('⚠️ Redis verifyOtp failed, using memory fallback:', err.message);
@@ -123,8 +139,9 @@ async function verifyOtp(type, email, otp) {
     return { ok: false, message: 'Incorrect code. Please try again.' };
   }
 
+  const extraData = data.data;
   otpFallbackMap.delete(codeKey);
-  return { ok: true };
+  return { ok: true, data: extraData };
 }
 
 async function sendOtpEmail(to, otp) {
@@ -209,19 +226,23 @@ router.post('/register', async (req, res) => {
     if (existing)
       return res.status(409).json({ success: false, message: 'An account with this email already exists. Please sign in instead.' });
 
-    // Hash + store password (creates a stub user row) then send OTP
+    // 1. Hash password but DO NOT store in MongoDB yet.
+    // This avoids orphaned stubs if the email fails.
     const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    await userService.setPasswordHash(email, hash);
 
+    // 2. Generate OTP and store { otp, hash } in Redis
     const otp = generateOtp();
-    await storeOtp('signin', email, otp);
+    await storeOtp('signin', email, otp, { registrationHash: hash });
+
+    // 3. Send email
     try {
       await sendOtpEmail(email, otp);
-      console.log(`[auth] register OTP sent to ${email}`);
+      console.log(`[auth] register OTP sent to ${email} (pending)`);
       return res.json({ success: true, message: 'OTP sent to your email.' });
     } catch (err) {
       console.error('[auth] email send failed:', err.message);
-      return res.status(500).json({ success: false, message: 'Failed to send email. Try again.' });
+      // No need to cleanup MongoDB here because we haven't touched it yet!
+      return res.status(500).json({ success: false, message: `Failed to send email: ${err.message}. Please check your SMTP settings.` });
     }
   } catch (error) {
     console.error('[auth] register crash:', error.message);
@@ -231,35 +252,46 @@ router.post('/register', async (req, res) => {
 
 // ─── POST /api/auth/verify-otp — shared by sign-in and register ──────────────
 router.post('/verify-otp', async (req, res) => {
-  const email = (req.body.email || '').trim().toLowerCase();
-  const otp   = String(req.body.otp || '');
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const otp   = String(req.body.otp || '');
 
-  if (!email || !otp)
-    return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
+    if (!email || !otp)
+      return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
 
-  const result = await verifyOtp('signin', email, otp);
-  if (!result.ok)
-    return res.status(400).json({ success: false, message: result.message });
+    const result = await verifyOtp('signin', email, otp);
+    if (!result.ok)
+      return res.status(400).json({ success: false, message: result.message });
 
-  // Register or update last_seen
-  const { isNew, user } = await userService.registerUser(email);
-  if (!isNew) {
-    await userService.logActivity({ icon: 'log-in', color: '#60a5fa', title: 'User signed in', sub: email });
+    // If result.data contains a registrationHash, this was a new registration
+    if (result.data && result.data.registrationHash) {
+      await userService.setPasswordHash(email, result.data.registrationHash);
+      console.log(`[auth] ${email} applied registration password hash`);
+    }
+
+    // Register or update last_seen
+    const { isNew, user } = await userService.registerUser(email);
+    if (!isNew) {
+      await userService.logActivity({ icon: 'log-in', color: '#60a5fa', title: 'User signed in', sub: email });
+    }
+
+    const token = issueToken(email);
+    console.log(`[auth] ${email} verified OTP (${isNew ? 'new user' : 'returning'})`);
+    return res.json({ 
+      success: true, 
+      token, 
+      email, 
+      isNew, 
+      isAdmin: isAdmin(email),
+      name: user.name,
+      profile_image: user.profile_image,
+      profile_border: (user.subscription === 'premium') ? user.profile_border : null,
+      subscription: user.subscription || 'free'
+    });
+  } catch (error) {
+    console.error('[auth] verify-otp crash:', error.message);
+    return res.status(500).json({ success: false, message: 'Verification failed.' });
   }
-
-  const token = issueToken(email);
-  console.log(`[auth] ${email} verified OTP (${isNew ? 'new user' : 'returning'})`);
-  return res.json({ 
-    success: true, 
-    token, 
-    email, 
-    isNew, 
-    isAdmin: isAdmin(email),
-    name: user.name,
-    profile_image: user.profile_image,
-    profile_border: (user.subscription === 'premium') ? user.profile_border : null,
-    subscription: user.subscription || 'free'
-  });
 });
 
 // ─── POST /api/auth/forgot-password — send reset OTP (user must exist) ───────
