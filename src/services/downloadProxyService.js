@@ -29,6 +29,7 @@ class DownloadProxyService {
 
         const args = [
             '-loglevel', 'error', // 🔇 Reduce memory usage by suppressing logs
+            '-threads', '1',      // 🏎️ Limit to 1 thread to save memory on Render Free
             '-user_agent', this._headers(referer, origin)['User-Agent'],
             '-headers', `Referer: ${referer}\r\nOrigin: ${origin}\r\n`,
             '-i', streamUrl,
@@ -102,6 +103,7 @@ class DownloadProxyService {
 
         const args = [
             '-loglevel', 'error',
+            '-threads', '1',      // 🏎️ Limit to 1 thread to save memory on Render Free
             '-user_agent', this._headers(referer, origin)['User-Agent'],
             '-headers', `Referer: ${referer}\r\nOrigin: ${origin}\r\n`,
             '-i', streamUrl,
