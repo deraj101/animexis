@@ -28,6 +28,7 @@ class DownloadProxyService {
         res.setTimeout(0);
 
         const args = [
+            '-loglevel', 'error', // 🔇 Reduce memory usage by suppressing logs
             '-user_agent', this._headers(referer, origin)['User-Agent'],
             '-headers', `Referer: ${referer}\r\nOrigin: ${origin}\r\n`,
             '-i', streamUrl,
@@ -100,6 +101,7 @@ class DownloadProxyService {
         const tempFile = path.join(os.tmpdir(), `animexis-${crypto.randomUUID()}.mp4`);
 
         const args = [
+            '-loglevel', 'error',
             '-user_agent', this._headers(referer, origin)['User-Agent'],
             '-headers', `Referer: ${referer}\r\nOrigin: ${origin}\r\n`,
             '-i', streamUrl,
