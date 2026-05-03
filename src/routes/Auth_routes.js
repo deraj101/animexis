@@ -32,15 +32,14 @@ const redisClient = require('../db/redisClient');
 
 // ─── Gmail transporter ─────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // true for 465, false for 587/STARTTLS
-  auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
-  connectionTimeout: 10000, // 10s timeout
-  greetingTimeout: 5000,
-  socketTimeout: 15000,
-  family: 4, // Force IPv4 resolution
-  localAddress: '0.0.0.0', // Force local binding to IPv4
+  service: 'gmail',
+  auth: { 
+    user: process.env.GMAIL_USER, 
+    pass: process.env.GMAIL_APP_PASSWORD 
+  },
+  connectionTimeout: 20000,
+  greetingTimeout: 10000,
+  socketTimeout: 30000,
 });
 
 // In-memory fallback if Redis is down
