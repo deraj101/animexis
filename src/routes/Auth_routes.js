@@ -40,6 +40,7 @@ const transporter = nodemailer.createTransport({
   connectionTimeout: 20000,
   greetingTimeout: 10000,
   socketTimeout: 30000,
+  family: 4, // Force IPv4
 });
 
 // In-memory fallback if Redis is down

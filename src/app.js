@@ -23,27 +23,14 @@ app.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
 }));
 
-// Enable CORS — respect ALLOWED_ORIGINS env var, fallback to * for dev
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',') 
-    : '*';
-
+// Enable CORS — permissive for mobile apps
 app.use(cors({
-    origin: allowedOrigins,
+    origin: '*',
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Range', 'Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range'],
     exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Type'],
+    credentials: true
 }));
-
-// Ensure all responses have correct CORS + CORP headers for cross-origin media
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Range, Content-Type');
-    res.header('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
-    res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.header('Cross-Origin-Embedder-Policy', 'unsafe-none');
-    next();
-});
 
 // Logging
 app.use(morgan('dev'));
