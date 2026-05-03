@@ -48,4 +48,13 @@ router.delete('/feedbacks/:id', admin.deleteReport);
 // ── System Announcements ────────────────────────────────────────────────────
 router.post('/send-notification', admin.sendGlobalNotification);
 
+// ── User Verification ───────────────────────────────────────────────────────
+router.get('/pending-verifications', admin.getPendingUsers);
+router.post('/verify-user/:email',   admin.approveUser);
+
+// ── Manual Subscriptions ────────────────────────────────────────────────────
+router.get('/subscription-requests',      admin.getSubscriptionRequests);
+router.post('/subscription-requests/:id/approve', admin.approveSubscriptionRequest);
+router.post('/subscription-requests/:id/reject',  admin.rejectSubscriptionRequest);
+
 module.exports = router;

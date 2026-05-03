@@ -41,6 +41,20 @@ class ScraperService {
         });
     }
 
+    getEmbedPriority(url = '') {
+        try {
+            const parsed = new URL(url);
+            const host = parsed.hostname.toLowerCase();
+            const path = parsed.pathname.toLowerCase();
+
+            if (host.includes('vibeplayer') && path.startsWith('/ag')) return 100;
+            if (host.includes('vibeplayer')) return 50;
+            if (/file|stream|cdn|gogo|mcloud|mp4upload/.test(host + path)) return 25;
+        } catch {}
+
+        return 0;
+    }
+
     // Try next domain if current one fails
     async tryNextDomain() {
         this.currentDomainIndex = (this.currentDomainIndex + 1) % this.workingDomains.length;
@@ -55,6 +69,7 @@ class ScraperService {
             await axios.get(domain, {
                 httpsAgent: this.httpsAgent,
                 timeout: 5000,
+                proxy: false,
                 maxRedirects: 2
             });
             return true;
@@ -70,7 +85,8 @@ class ScraperService {
             try {
                 await axios.get(domain, {
                     httpsAgent: this.httpsAgent,
-                    timeout: 5000
+                    timeout: 5000,
+                    proxy: false
                 });
                 console.log(`✅ Domain working: ${domain}`);
                 this.baseUrl = domain;
@@ -108,6 +124,7 @@ class ScraperService {
                 },
                 timeout: 30000,
                 maxRedirects: 5,
+                proxy: false,
                 validateStatus: status => status < 400,
                 httpsAgent: this.httpsAgent
             });
@@ -163,6 +180,103 @@ class ScraperService {
             console.error(`[peek] fail: ${idOrUrl}`, e.message);
             return null;
         }
+    }
+
+    async isUsableHlsSource(m3u8Url, refererUrl) {
+        try {
+            const origin = new URL(m3u8Url).origin;
+            const playlist = await this.fetchText(m3u8Url, refererUrl, origin);
+            const variants = this.parseHlsVariants(playlist, m3u8Url);
+            const candidates = variants.length > 0 ? variants : [{ url: m3u8Url, bandwidth: 0 }];
+
+            candidates.sort((a, b) => b.bandwidth - a.bandwidth);
+
+            for (const candidate of candidates) {
+                const mediaPlaylist = candidate.url === m3u8Url
+                    ? playlist
+                    : await this.fetchText(candidate.url, refererUrl, origin);
+                const firstSegment = this.findFirstHlsSegment(mediaPlaylist, candidate.url);
+                if (!firstSegment) continue;
+
+                const response = await axios.get(firstSegment, {
+                    timeout: 10000,
+                    responseType: 'stream',
+                    proxy: false,
+                    headers: {
+                        ...HEADERS,
+                        Referer: refererUrl,
+                        Origin: origin,
+                        Range: 'bytes=0-31',
+                    },
+                    validateStatus: status => status < 400,
+                });
+
+                response.data.destroy();
+                const contentType = String(response.headers['content-type'] || '').toLowerCase();
+                if (!contentType.startsWith('image/')) return true;
+            }
+        } catch (error) {
+            console.warn(`HLS validation failed for ${m3u8Url}: ${error.message}`);
+            return true;
+        }
+
+        return false;
+    }
+
+    async fetchText(url, referer, origin) {
+        const response = await axios.get(url, {
+            timeout: 10000,
+            responseType: 'text',
+            proxy: false,
+            headers: {
+                ...HEADERS,
+                Referer: referer,
+                Origin: origin,
+            },
+        });
+        return response.data;
+    }
+
+    parseHlsVariants(playlist, baseUrl) {
+        const lines = String(playlist).split(/\r?\n/);
+        const variants = [];
+
+        for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i].trim();
+            if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
+
+            const bandwidth = Number(line.match(/BANDWIDTH=(\d+)/)?.[1] || 0);
+            const nextLine = lines.slice(i + 1).find((candidate) => {
+                const trimmed = candidate.trim();
+                return trimmed && !trimmed.startsWith('#');
+            });
+
+            if (nextLine) {
+                variants.push({
+                    url: new URL(nextLine.trim(), baseUrl).toString(),
+                    bandwidth,
+                });
+            }
+        }
+
+        return variants;
+    }
+
+    findFirstHlsSegment(playlist, baseUrl) {
+        const lines = String(playlist).split(/\r?\n/);
+
+        for (let i = 0; i < lines.length; i += 1) {
+            if (!lines[i].trim().startsWith('#EXTINF')) continue;
+
+            const nextLine = lines.slice(i + 1).find((candidate) => {
+                const trimmed = candidate.trim();
+                return trimmed && !trimmed.startsWith('#');
+            });
+
+            return nextLine ? new URL(nextLine.trim(), baseUrl).toString() : null;
+        }
+
+        return null;
     }
 
     /**
@@ -667,7 +781,16 @@ class ScraperService {
             }
 
             console.log(`✅ Resolved ${videoSources.length} sources from iframe`);
-            return videoSources;
+            const usableSources = [];
+            for (const source of videoSources) {
+                if (!source.url.includes('.m3u8') || await this.isUsableHlsSource(source.url, iframeUrl)) {
+                    usableSources.push(source);
+                } else {
+                    console.log(`Skipping non-video HLS source: ${source.url}`);
+                }
+            }
+
+            return usableSources;
         } catch (error) {
             console.error('Error resolving iframe source:', error.message);
             return [];
@@ -856,6 +979,7 @@ class ScraperService {
                 });
 
                 if (embedUrls.length > 0) {
+                    embedUrls.sort((a, b) => this.getEmbedPriority(b.url) - this.getEmbedPriority(a.url));
                     console.log(`🔗 Found ${embedUrls.length} embed URLs, resolving streams...`);
                     // Use first embed as the iframe for the player
                     episodeData.iframe = embedUrls[0].url;
@@ -941,9 +1065,18 @@ class ScraperService {
 
             // 🚀 NEW: If still no sources but we have an iframe, try to resolve it!
             if (episodeData.videoSources.length === 0 && episodeData.iframe) {
-                const resolvedSources = await this.resolveIframeSource(episodeData.iframe);
-                if (resolvedSources && resolvedSources.length > 0) {
-                    episodeData.videoSources.push(...resolvedSources);
+                const resolveTargets = [
+                    episodeData.iframe,
+                    ...(episodeData.servers || []).map(server => server.url)
+                ].filter((url, index, arr) => url && arr.indexOf(url) === index);
+
+                for (const target of resolveTargets) {
+                    const resolvedSources = await this.resolveIframeSource(target);
+                    if (resolvedSources && resolvedSources.length > 0) {
+                        episodeData.iframe = target;
+                        episodeData.videoSources.push(...resolvedSources);
+                        break;
+                    }
                 }
             }
 

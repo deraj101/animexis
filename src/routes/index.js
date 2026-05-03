@@ -12,6 +12,7 @@ const notificationRoutes = require('./notificationRoutes');
 const userRoutes = require('./userRoutes'); // 👤 NEW
 const paymentRoutes = require('./paymentRoutes'); // 💳 NEW
 const feedbackRoutes = require('./feedbackRoutes'); // 📝 NEW
+const subscriptionRoutes = require('./subscriptionRoutes'); // 🛡️ NEW
 
 // ── Health check ──────────────────────────────────────────────────────────────
 router.get('/health', (req, res) => {
@@ -32,6 +33,7 @@ router.use('/notifications', notificationRoutes); // ← notification system �
 router.use('/users', userRoutes); // ← public profiles 👤
 router.use('/payments', paymentRoutes); // ← subscription payments 💳
 router.use('/feedback', feedbackRoutes); // ← user feedback 📝
+router.use('/subscription', subscriptionRoutes); // 🛡️ NEW
 
 // ── API info ──────────────────────────────────────────────────────────────────
 router.get('/', (req, res) => {

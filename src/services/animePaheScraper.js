@@ -24,6 +24,7 @@ class AnimePaheScraper {
         this._browser = null;
         this._context = null;
         this._launching = null;  // prevents duplicate launches
+        this._zenRowsDisabledUntil = 0;
     }
 
     // ────────────────────────────────────────────────────────────────────────────
@@ -420,7 +421,7 @@ class AnimePaheScraper {
                 let kwikPage = newPage || (await popupPromise);
                 
                 // 🚀 ZENROWS INTEGRATION
-                if (interceptedKwikUrl && process.env.ZENROWS_API_KEY) {
+                if (interceptedKwikUrl && process.env.ZENROWS_API_KEY && Date.now() >= this._zenRowsDisabledUntil) {
                     console.log(`[AnimePahe] 🛡️ ZenRows API Key found! Bypassing Cloudflare...`);
                     try {
                         const axios = require('axios');
@@ -473,9 +474,15 @@ class AnimePaheScraper {
                     } catch (zenErr) {
                         console.log(`[AnimePahe] ❌ ZenRows API failed: ${zenErr.message}`);
                         if (zenErr.response) {
+                            if (zenErr.response.status === 402) {
+                                this._zenRowsDisabledUntil = Date.now() + 60 * 60 * 1000;
+                                console.log('[AnimePahe] ZenRows returned 402; disabling ZenRows attempts for 1 hour.');
+                            }
                             console.log(`[AnimePahe] ❌ ZenRows Response Status: ${zenErr.response.status}`);
                         }
                     }
+                } else if (interceptedKwikUrl && process.env.ZENROWS_API_KEY) {
+                    console.log('[AnimePahe] ZenRows temporarily disabled after a previous billing/credit error.');
                 }
 
                 if (!kwikPage) {
@@ -531,30 +538,11 @@ class AnimePaheScraper {
         const url = page.url();
         console.log(`[AnimePahe] 🧪 Extracting from: ${url}`);
 
-        // Wait for Cloudflare/DDoS-Guard/Turnstile
-        for (let i = 0; i < 30; i++) {
-            const title = await page.title();
-            const content = await page.innerText('body').catch(() => '');
-            if (!title.includes('Just a moment') && 
-                !content.includes('Checking') && 
-                !content.includes('DDoS') && 
-                !content.includes('security verification') &&
-                !content.includes('Cloudflare') &&
-                content.length > 50) {
-                break;
-            }
-            // Try to click Turnstile if it appears
-            try {
-                const turnstile = page.locator('iframe[src*="challenges.cloudflare.com"]').first();
-                if (await turnstile.count() > 0) {
-                    const box = await turnstile.boundingBox();
-                    if (box) {
-                        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-                    }
-                }
-            } catch (e) {}
-            
-            await page.waitForTimeout(1000);
+        const ready = await this._waitForKwikReady(page);
+        if (!ready) {
+            console.log('[AnimePahe] Kwik is still showing Cloudflare verification; skipping this source.');
+            await this._dumpKwikDebug(page, 'kwik_debug');
+            return null;
         }
 
         // 1. Check for a download button/form on /f/ pages (Common for pahe.win redirects)
@@ -741,6 +729,43 @@ class AnimePaheScraper {
     // HIGH-LEVEL API — All-in-one: search → episodes → sources → resolve
     // Used by the /api/anime/pahe-sources endpoint
     // ────────────────────────────────────────────────────────────────────────────
+    async _waitForKwikReady(page, timeoutMs = 15000) {
+        const started = Date.now();
+
+        while (Date.now() - started < timeoutMs) {
+            const title = await page.title().catch(() => '');
+            const content = await page.innerText('body').catch(() => '');
+            const html = await page.content().catch(() => '');
+
+            if (!this._isChallengePage(title, content, html)) {
+                return true;
+            }
+
+            await page.waitForTimeout(1000);
+        }
+
+        return false;
+    }
+
+    _isChallengePage(title = '', content = '', html = '') {
+        const haystack = `${title}\n${content}\n${html}`;
+        return /just a moment|checking|ddos|security verification|cloudflare|cf-turnstile|challenge-platform/i.test(haystack);
+    }
+
+    async _dumpKwikDebug(page, name) {
+        try {
+            const path = require('path');
+            const fs = require('fs');
+            const scratchDir = path.resolve(__dirname, '../../scratch');
+            fs.mkdirSync(scratchDir, { recursive: true });
+            fs.writeFileSync(path.join(scratchDir, `${name}.html`), await page.content());
+            await page.screenshot({ path: path.join(scratchDir, `${name}.png`) });
+            console.log(`[AnimePahe] Dumped debug info to scratch/${name}.*`);
+        } catch (err) {
+            console.log(`[AnimePahe] Failed to dump debug info: ${err.message}`);
+        }
+    }
+
     async getDownloadLinks(animeTitle, episodeNumber) {
         try {
             console.log(`[AnimePahe] 🔍 Full pipeline: "${animeTitle}" Ep ${episodeNumber}`);

@@ -110,6 +110,15 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  is_verified: {
+    type: Boolean,
+    default: false
+  },
+  account_status: {
+    type: String,
+    enum: ['active', 'pending', 'suspended'],
+    default: 'pending'
+  },
 
 }, {
   timestamps: false // We manually manage joined_at and last_seen for legacy compatibility

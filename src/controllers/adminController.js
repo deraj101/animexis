@@ -4,6 +4,8 @@ const cacheMiddleware = require('../middleware/cache');
 const jwt            = require('jsonwebtoken');
 const Feedback       = require('../db/models/feedbackModel');
 const Notification   = require('../db/models/notificationModel');
+const User           = require('../db/models/userModel');
+const SubscriptionRequest = require('../db/models/subscriptionRequestModel');
 
 // ─── Admin whitelist ─────────────────────────────────────────────────────────
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'jaredcuerbo21@gmail.com')
@@ -381,9 +383,8 @@ async function updateUser(req, res, next) {
 async function deleteUser(req, res, next) {
   try {
     const { email } = req.params;
-    const User = require('../db/models/userModel');
-    await User.findOneAndDelete({ email: email.toLowerCase() });
-    res.json({ success: true, message: 'Deleted' });
+    await userService.deleteUser(email);
+    res.json({ success: true, message: 'User and all related data deleted' });
   } catch (err) { next(err); }
 }
 
@@ -455,6 +456,105 @@ async function sendGlobalNotification(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// ─── User Verification ───────────────────────────────────────────────────────
+
+async function getPendingUsers(req, res, next) {
+  try {
+    const users = await User.find({ account_status: 'pending' }).sort({ joined_at: -1 }).lean();
+    res.json({ success: true, users });
+  } catch (err) { next(err); }
+}
+
+async function approveUser(req, res, next) {
+  try {
+    const { email } = req.params;
+    const user = await User.findOneAndUpdate(
+      { email: email.toLowerCase() },
+      { account_status: 'active', is_verified: true },
+      { new: true }
+    ).lean();
+    
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    
+    // Notify user
+    await Notification.create({
+      userEmail: email.toLowerCase(),
+      type: 'SYSTEM',
+      title: 'Account Verified',
+      message: 'Your account has been verified by the admin. Welcome to Animexis!',
+      refId: 'verification'
+    });
+
+    res.json({ success: true, message: 'User approved and verified.' });
+  } catch (err) { next(err); }
+}
+
+// ─── Manual Subscription Approval ───────────────────────────────────────────
+
+async function getSubscriptionRequests(req, res, next) {
+  try {
+    const requests = await SubscriptionRequest.find().sort({ createdAt: -1 }).lean();
+    res.json({ success: true, requests });
+  } catch (err) { next(err); }
+}
+
+async function approveSubscriptionRequest(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { adminNote } = req.body;
+    
+    const request = await SubscriptionRequest.findById(id);
+    if (!request) return res.status(404).json({ success: false, error: 'Request not found' });
+    if (request.status !== 'pending') return res.status(400).json({ success: false, error: 'Request already processed' });
+
+    // 1. Mark request as approved
+    request.status = 'approved';
+    request.adminNote = adminNote;
+    request.processedAt = new Date();
+    await request.save();
+
+    // 2. Upgrade user to premium
+    await userService.setSubscription(request.userEmail, 'premium');
+
+    // 3. Send notification
+    await Notification.create({
+      userEmail: request.userEmail,
+      type: 'SYSTEM',
+      title: 'Subscription Activated',
+      message: `Your ${request.plan} has been manually activated. Thank you for your support!`,
+      refId: 'subscription'
+    });
+
+    res.json({ success: true, message: 'Subscription approved and activated.' });
+  } catch (err) { next(err); }
+}
+
+async function rejectSubscriptionRequest(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { adminNote } = req.body;
+
+    const request = await SubscriptionRequest.findById(id);
+    if (!request) return res.status(404).json({ success: false, error: 'Request not found' });
+
+    request.status = 'rejected';
+    request.adminNote = adminNote;
+    request.processedAt = new Date();
+    await request.save();
+
+    // Notify user
+    await Notification.create({
+      userEmail: request.userEmail,
+      type: 'SYSTEM',
+      title: 'Subscription Request Rejected',
+      message: `Your subscription request was rejected. Note: ${adminNote || 'Contact support for details.'}`,
+      refId: 'system'
+    });
+
+    res.json({ success: true, message: 'Subscription request rejected.' });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   isAdmin,
   requireAdmin,
@@ -483,4 +583,9 @@ module.exports = {
   deleteComment,
   deleteReport,
   sendGlobalNotification,
+  getPendingUsers,
+  approveUser,
+  getSubscriptionRequests,
+  approveSubscriptionRequest,
+  rejectSubscriptionRequest,
 };

@@ -84,6 +84,7 @@ router.get('/stream', usageLimiter, async (req, res) => {
 
 // 🚀 NEW: Download proxy for M3U8 -> MP4
 router.get('/download-m3u8', usageLimiter, animeController.downloadM3u8);
+router.get('/download-file', usageLimiter, animeController.downloadFile);
 
 // 🚀 AnimePahe direct MP4 sources (called by download button, not on every episode load)
 router.get('/pahe-sources', usageLimiter, async (req, res) => {
@@ -95,7 +96,13 @@ router.get('/pahe-sources', usageLimiter, async (req, res) => {
 
         console.log(`[AnimePahe] 📥 Download request: "${title}" Ep ${episode}`);
         const animePaheScraper = require('../services/animePaheScraper');
-        const result = await animePaheScraper.getDownloadLinks(title, episode);
+        const result = await Promise.race([
+            animePaheScraper.getDownloadLinks(title, episode),
+            new Promise(resolve => setTimeout(() => resolve({
+                success: false,
+                error: 'AnimePahe timed out; use fallback sources'
+            }), 30000))
+        ]);
         res.json(result);
     } catch (error) {
         console.error('[AnimePahe] pahe-sources error:', error.message);
@@ -233,9 +240,6 @@ router.get('/search-history',    animeController.getSearchHistory);
 router.delete('/search-history', animeController.clearSearchHistory);
 
 
-
-// Download M3U8 (Proxy for downloading HLS as MP4)
-router.get('/download-m3u8',   animeController.downloadM3u8);
 
 // Test route — must be BEFORE /:id to avoid being swallowed by the catch-all
 router.get('/test', (req, res) => {

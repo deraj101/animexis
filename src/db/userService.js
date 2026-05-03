@@ -5,6 +5,8 @@ const Comment = require('./models/commentModel');
 const { AnimeView, AppVisit, ContinueWatching } = require('./models/analyticsModels');
 const WatchHistory = require('./models/watchHistoryModel');
 const SearchHistory = require('./models/searchHistoryModel');
+const Notification = require('./models/notificationModel');
+const Feedback = require('./models/feedbackModel');
 
 
 
@@ -40,8 +42,29 @@ async function findUser(email) {
   return await UserModel.findOne({ email: email.toLowerCase() }).lean(); 
 }
 
-async function deleteUser(email) { 
-  return await UserModel.deleteOne({ email: email.toLowerCase() }); 
+async function deleteUser(email) {
+  const normalizedEmail = email.toLowerCase();
+  
+  // 1. Find the user to get their ID (needed for some related models like Feedback)
+  const user = await UserModel.findOne({ email: normalizedEmail });
+  if (!user) return { deletedCount: 0 };
+
+  const userId = user._id;
+
+  // 2. Delete user record (contains ratings, favorites, watchlist)
+  const result = await UserModel.deleteOne({ _id: userId });
+  
+  // 3. Cleanup related data across other models
+  await Promise.all([
+    Notification.deleteMany({ userEmail: normalizedEmail }),
+    ContinueWatching.deleteMany({ email: normalizedEmail }),
+    WatchHistory.deleteMany({ email: normalizedEmail }),
+    SearchHistory.deleteMany({ email: normalizedEmail }),
+    Comment.deleteMany({ userEmail: normalizedEmail }),
+    Feedback.deleteMany({ user: userId }) // Feedback uses userId ref
+  ]);
+
+  return result;
 }
 
 async function updateProfile(email, profile) {
@@ -76,6 +99,16 @@ async function updateProfile(email, profile) {
 
 async function setSubscription(email, subscription) {
   const normalizedEmail = email.toLowerCase();
+  
+  // 1. Fetch current user to check subscription state
+  const oldUser = await UserModel.findOne({ email: normalizedEmail }).lean();
+  if (!oldUser) return null;
+
+  // 2. Only log and update if there's an actual change
+  if (oldUser.subscription === subscription) {
+    return oldUser;
+  }
+
   const user = await UserModel.findOneAndUpdate(
     { email: normalizedEmail },
     { $set: { subscription } },
@@ -118,6 +151,14 @@ async function setPasswordHash(email, hash) {
  */
 async function setOtpBypass(email, enabled) {
   const normalizedEmail = email.toLowerCase();
+  
+  // 1. Check current status
+  const user = await UserModel.findOne({ email: normalizedEmail }, 'otp_bypass').lean();
+  if (!user) return;
+  
+  // 2. Skip if no change
+  if (!!user.otp_bypass === !!enabled) return;
+
   await UserModel.updateOne({ email: normalizedEmail }, { otp_bypass: enabled });
   logActivity({
     icon:  enabled ? 'key' : 'key-outline',

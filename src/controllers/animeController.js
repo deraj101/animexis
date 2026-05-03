@@ -536,13 +536,70 @@ async function getAnimeByLetter(req, res, next) {
     }
 }
 async function downloadM3u8(req, res) {
-    const { url } = req.query;
+    const { url, format } = req.query;
     if (!url || !url.includes('.m3u8')) {
         return res.status(400).json({ success: false, error: 'Valid M3U8 URL is required' });
     }
     
     const downloadProxyService = require('../services/downloadProxyService');
-    downloadProxyService.streamAsMp4(url, res);
+    if (format === 'ts') {
+        return downloadProxyService.streamAsTs(url, res);
+    }
+    await downloadProxyService.streamAsMp4(url, res);
+}
+
+async function downloadFile(req, res) {
+    const { url } = req.query;
+    if (!url || !/^https?:\/\//i.test(url)) {
+        return res.status(400).json({ success: false, error: 'Valid download URL is required' });
+    }
+
+    try {
+        const axios = require('axios');
+        const parsed = new URL(url);
+        const origin = parsed.origin;
+        const referer = /(?:kwikcdn|kwcdn|nextcdn)\.org/i.test(parsed.hostname)
+            ? 'https://kwik.si/'
+            : `${origin}/`;
+
+        const upstream = await axios.get(url, {
+            responseType: 'stream',
+            timeout: 30000,
+            maxRedirects: 5,
+            proxy: false,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': referer,
+                'Origin': origin,
+                'Accept': '*/*',
+            },
+        });
+
+        res.setHeader('Content-Type', upstream.headers['content-type'] || 'video/mp4');
+        res.setHeader('Content-Disposition', 'attachment; filename="episode.mp4"');
+        if (upstream.headers['content-length']) {
+            res.setHeader('Content-Length', upstream.headers['content-length']);
+        }
+
+        upstream.data.on('error', (error) => {
+            console.error('[download-file] upstream stream error:', error.message);
+            if (!res.headersSent) {
+                res.status(502).json({ success: false, error: 'Download stream failed' });
+            } else {
+                res.destroy(error);
+            }
+        });
+
+        upstream.data.pipe(res);
+    } catch (error) {
+        console.error('[download-file] failed:', error.message);
+        if (!res.headersSent) {
+            res.status(error.response?.status || 500).json({
+                success: false,
+                error: 'Failed to fetch downloadable file',
+            });
+        }
+    }
 }
 
 module.exports = {
@@ -568,4 +625,5 @@ module.exports = {
     clearSearchHistory,
     getEpisodeProgress,
     downloadM3u8,
+    downloadFile,
 };

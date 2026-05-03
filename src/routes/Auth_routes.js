@@ -280,6 +280,9 @@ router.post('/verify-otp', async (req, res) => {
     // Register or update last_seen
     const { isNew, user } = await userService.registerUser(email);
     if (!isNew) {
+      if (user.account_status === 'suspended') {
+        return res.status(403).json({ success: false, message: 'Your account has been suspended. Please contact support.' });
+      }
       await userService.logActivity({ icon: 'log-in', color: '#60a5fa', title: 'User signed in', sub: email });
     }
 
@@ -294,7 +297,9 @@ router.post('/verify-otp', async (req, res) => {
       name: user.name,
       profile_image: user.profile_image,
       profile_border: (user.subscription === 'premium') ? user.profile_border : null,
-      subscription: user.subscription || 'free'
+      subscription: user.subscription || 'free',
+      account_status: isAdmin(email) ? 'active' : (user.account_status || 'active'),
+      is_verified: isAdmin(email) ? true : !!user.is_verified
     });
   } catch (error) {
     console.error('[auth] verify-otp crash:', error.message);
@@ -382,6 +387,11 @@ router.post('/bypass-login', async (req, res) => {
   }
 
   const { user } = await userService.registerUser(email);
+  
+  if (user.account_status === 'suspended') {
+    return res.status(403).json({ success: false, message: 'Your account has been suspended.' });
+  }
+
   await userService.logActivity({ icon: 'key', color: '#22c55e', title: 'Bypass login', sub: email });
   const token = issueToken(email);
   console.log(`[auth] ${email} signed in via bypass`);
@@ -393,7 +403,9 @@ router.post('/bypass-login', async (req, res) => {
     name: user.name,
     profile_image: user.profile_image,
     profile_border: (user.subscription === 'premium') ? user.profile_border : null,
-    subscription: user.subscription || 'free'
+    subscription: user.subscription || 'free',
+    account_status: isAdmin(email) ? 'active' : (user.account_status || 'active'),
+    is_verified: isAdmin(email) ? true : !!user.is_verified
   });
 });
 
